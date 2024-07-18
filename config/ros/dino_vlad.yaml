@@ -93,10 +93,15 @@ localmapping:
         # length_y: 80.
         # resolution: 0.5
 
-       origin: [-20., -20.]
-       length_x: 40.
-       length_y: 40.
+       origin: [-25., -25.]
+       length_x: 50.
+       length_y: 50.
        resolution: 0.1999
+
+       # origin: [-20., -20.]
+       # length_x: 40.
+       # length_y: 40.
+       # resolution: 0.1999
 
        # origin: [-20., -20.]
        # length_x: 40.

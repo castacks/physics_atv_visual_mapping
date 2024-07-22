@@ -1,0 +1,47 @@
+image:
+    image_topic: /multisense/left/image_rect_color
+    camera_info_topic: /multisense/left/camera_info
+    image_compressed: False
+
+pointcloud:
+    topic: /velodyne_1/velodyne_points
+#    topic: /coloroze_pcl_node/colorized_pcl
+
+odometry:
+    topic: /integrated_to_init
+
+gridmap:
+    topic: local_gridmap
+
+intrinsics:
+    K: [455.7750, 0., 497.1180, 0., 456.3191, 251.8580, 0., 0., 1.]
+    P: [477.6049499511719, 0.0, 499.5,  0.0, 477.6049499511719, 252.0,  0.0, 0.0, 1.0]
+
+extrinsics:
+    p: [0.17265, -0.15227, 0.05708]
+    q: [0.55940, -0.54718, 0.44603, 0.43442] #xyzw
+
+image_processing:
+    -
+        type: distilled_radio
+        args:
+            run_path: /home/physics_atv/visual_feature_distiller/runs/wandb/denim-wind-16/
+            best: True
+    - 
+        type: pca
+        args:
+            fp: /home/physics_atv/physics_atv_ws/src/perception/physics_atv_visual_mapping/data/pca/distilled_radio_16.pt
+
+localmapping:
+    layer_key: distilled_radio
+
+    ema: 0.5 #higher->use recent more
+    metadata:
+        origin: [-40., -40.]
+        length_x: 80.
+        length_y: 80.
+        resolution: 0.5
+
+device: cuda
+#viz: True
+viz: False

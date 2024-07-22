@@ -29,7 +29,7 @@ if __name__ == '__main__':
     ], axis=-1)
     extrinsics = pose_to_htm(lidar_to_cam)
 
-    intrinsics = get_intrinsics(torch.tensor(config['intrinsics']['K']).reshape(3, 3))
+    intrinsics = get_intrinsics(torch.tensor(config['intrinsics']['P']).reshape(3, 3))
     #dont combin because we need to recalculate given dino
 
     pipeline = setup_image_pipeline(config)
@@ -43,87 +43,91 @@ if __name__ == '__main__':
         device=config['device']
     )
     """
-
-    odom_dir = os.path.join(args.data_dir, config['odometry']['folder'])
-    poses = np.load(os.path.join(odom_dir, 'odometry.npy'))
-    pose_ts = np.loadtxt(os.path.join(odom_dir, 'timestamps.txt'))
-    mask = np.abs(pose_ts[1:]-pose_ts[:-1]) > 1e-4
-    poses = poses[1:][mask]
-    pose_ts = pose_ts[1:][mask]
-
-    traj_interp = TrajectoryInterpolator(pose_ts, poses)
-
-    img_dir = os.path.join(args.data_dir, config['image']['folder'])
-    img_ts = np.loadtxt(os.path.join(img_dir, 'timestamps.txt'))
-
-    pcl_dir = os.path.join(args.data_dir, config['pointcloud']['folder'])
-    pcl_ts = np.loadtxt(os.path.join(pcl_dir, 'timestamps.txt'))
-
-    pcl_img_dists = np.abs(img_ts.reshape(1, -1) - pcl_ts.reshape(-1, 1))
-    pcl_img_mindists = np.min(pcl_img_dists, axis=-1)
-    pcl_img_argmin = np.argmin(pcl_img_dists, axis=-1)
-
-    pcl_valid_mask = (pcl_ts > pose_ts[0]) & (pcl_ts < pose_ts[-1]) & (pcl_img_mindists < 0.1)
-    pcl_valid_idxs = np.argwhere(pcl_valid_mask).flatten()
-
-    print('found {} valid pcl-image pairs'.format(pcl_valid_mask.sum()))
-
+    
     dino_buf = []
+    for folder in os.listdir(args.data_dir):
+        import random # lol i have too much data, not enough gpu ram
+        if random.random() < 0.5:
+            continue
+        odom_dir = os.path.join(args.data_dir, folder, config['odometry']['folder'])
+        poses = np.load(os.path.join(odom_dir, 'odometry.npy'))
+        pose_ts = np.loadtxt(os.path.join(odom_dir, 'timestamps.txt'))
+        mask = np.abs(pose_ts[1:]-pose_ts[:-1]) > 1e-4
+        poses = poses[1:][mask]
+        pose_ts = pose_ts[1:][mask]
 
-    for pcl_idx in tqdm.tqdm(pcl_valid_idxs):
-        if pcl_idx % 10 == 0:
-            pcl_fp = os.path.join(pcl_dir, '{:06d}.npy'.format(pcl_idx))
-            pcl = torch.from_numpy(np.load(pcl_fp)).to(config['device']).float()
+        traj_interp = TrajectoryInterpolator(pose_ts, poses)
 
-            pcl_dists = torch.linalg.norm(pcl[:, :3], dim=-1)
-            pcl_mask = (pcl_dists > config['pcl_mindist']) & (pcl_dists < config['pcl_maxdist'])
-            pcl = pcl[pcl_mask]
+        img_dir = os.path.join(args.data_dir, folder, config['image']['folder'])
+        img_ts = np.loadtxt(os.path.join(img_dir, 'timestamps.txt'))
 
-            pcl = pcl[:, :3] #assume first three are [x,y,z]
+        pcl_dir = os.path.join(args.data_dir, folder, config['pointcloud']['folder'])
+        pcl_ts = np.loadtxt(os.path.join(pcl_dir, 'timestamps.txt'))
 
-            img_idx = pcl_img_argmin[pcl_idx]
-            img_fp = os.path.join(img_dir, '{:06d}.png'.format(img_idx))
-            img = torch.tensor(cv2.imread(img_fp)).permute(2,0,1)
+        pcl_img_dists = np.abs(img_ts.reshape(1, -1) - pcl_ts.reshape(-1, 1))
+        pcl_img_mindists = np.min(pcl_img_dists, axis=-1)
+        pcl_img_argmin = np.argmin(pcl_img_dists, axis=-1)
 
-            dino_feats, dino_intrinsics = pipeline.run(img.unsqueeze(0), intrinsics.unsqueeze(0))
-            dino_feats = dino_feats[0].permute(1,2,0)
-            dino_intrinsics = dino_intrinsics[0]
+        pcl_valid_mask = (pcl_ts > pose_ts[0]) & (pcl_ts < pose_ts[-1]) & (pcl_img_mindists < 0.1)
+        pcl_valid_idxs = np.argwhere(pcl_valid_mask).flatten()
 
-            extent = (
-                0,
-                dino_feats.shape[1],
-                0,
-                dino_feats.shape[0]
-            )
+        print('found {} valid pcl-image pairs'.format(pcl_valid_mask.sum()))
 
-            P = obtain_projection_matrix(dino_intrinsics, extrinsics).to(config['device'])
-            pcl_pixel_coords = get_pixel_from_3D_source(pcl, P)
-            pcl_in_frame, pixels_in_frame, ind_in_frame = get_points_and_pixels_in_frame(pcl, pcl_pixel_coords, dino_feats.shape[0], dino_feats.shape[1])
 
-            pcl_px_in_frame = pcl_pixel_coords[ind_in_frame]
-            dino_idxs = pixels_in_frame.unique(dim=0) #only get feats with a lidar return
+        for pcl_idx in tqdm.tqdm(pcl_valid_idxs):
+            if pcl_idx % 10 == 0:
+                pcl_fp = os.path.join(pcl_dir, '{:06d}.npy'.format(pcl_idx))
+                pcl = torch.from_numpy(np.load(pcl_fp)).to(config['device']).float()
 
-            mask_dino_feats = dino_feats[dino_idxs[:, 1], dino_idxs[:, 0]]
-            dino_buf.append(mask_dino_feats)
+                pcl_dists = torch.linalg.norm(pcl[:, :3], dim=-1)
+                pcl_mask = (pcl_dists > config['pcl_mindist']) & (pcl_dists < config['pcl_maxdist'])
+                pcl = pcl[pcl_mask]
 
-        """
-        if pcl_idx % 10 == 0:
-            fig, axs = plt.subplots(1, 3)
-            dino_viz = dino_feats[..., :3]
-            vmin = dino_viz.view(-1, 3).min(dim=0)[0].view(1,1,3)
-            vmax = dino_viz.view(-1, 3).max(dim=0)[0].view(1,1,3)
-            dino_viz = (dino_viz-vmin)/(vmax-vmin)
+                pcl = pcl[:, :3] #assume first three are [x,y,z]
 
-            axs[0].imshow(img.permute(1,2,0), extent=extent)
-            axs[0].imshow(dino_viz.cpu(), alpha=0.5, extent=extent)
-            axs[0].scatter(pcl_px_in_frame[:, 0].cpu(), dino_feats.shape[0]-pcl_px_in_frame[:, 1].cpu(), s=1., alpha=0.5)
+                img_idx = pcl_img_argmin[pcl_idx]
+                img_fp = os.path.join(img_dir, '{:06d}.png'.format(img_idx))
+                img = torch.tensor(cv2.imread(img_fp)).permute(2,0,1)
 
-            mask = torch.zeros_like(dino_viz[..., 0])
-            mask[dino_idxs[:, 1], dino_idxs[:, 0]] = 1.
-            axs[1].imshow(mask.cpu())
+                dino_feats, dino_intrinsics = pipeline.run(img.unsqueeze(0), intrinsics.unsqueeze(0))
+                dino_feats = dino_feats[0].permute(1,2,0)
+                dino_intrinsics = dino_intrinsics[0]
 
-            plt.show()
-        """
+                extent = (
+                    0,
+                    dino_feats.shape[1],
+                    0,
+                    dino_feats.shape[0]
+                )
+
+                P = obtain_projection_matrix(dino_intrinsics, extrinsics).to(config['device'])
+                pcl_pixel_coords = get_pixel_from_3D_source(pcl, P)
+                pcl_in_frame, pixels_in_frame, ind_in_frame = get_points_and_pixels_in_frame(pcl, pcl_pixel_coords, dino_feats.shape[0], dino_feats.shape[1])
+
+                pcl_px_in_frame = pcl_pixel_coords[ind_in_frame]
+                dino_idxs = pixels_in_frame.unique(dim=0) #only get feats with a lidar return
+
+                mask_dino_feats = dino_feats[dino_idxs[:, 1], dino_idxs[:, 0]]
+                dino_buf.append(mask_dino_feats)
+
+            """
+            if pcl_idx % 10 == 0:
+                fig, axs = plt.subplots(1, 3)
+                dino_viz = dino_feats[..., :3]
+                vmin = dino_viz.view(-1, 3).min(dim=0)[0].view(1,1,3)
+                vmax = dino_viz.view(-1, 3).max(dim=0)[0].view(1,1,3)
+                dino_viz = (dino_viz-vmin)/(vmax-vmin)
+
+                axs[0].imshow(img.permute(1,2,0), extent=extent)
+                axs[0].imshow(dino_viz.cpu(), alpha=0.5, extent=extent)
+                axs[0].scatter(pcl_px_in_frame[:, 0].cpu(), dino_feats.shape[0]-pcl_px_in_frame[:, 1].cpu(), s=1., alpha=0.5)
+
+                mask = torch.zeros_like(dino_viz[..., 0])
+                mask[dino_idxs[:, 1], dino_idxs[:, 0]] = 1.
+                axs[1].imshow(mask.cpu())
+
+                plt.show()
+            """
 
     dino_buf = torch.cat(dino_buf, dim=0)
     feat_mean = dino_buf.mean(dim=0)
@@ -137,72 +141,72 @@ if __name__ == '__main__':
     }
     torch.save(pca_res, args.save_to)
 
-    ## viz loop ##
-    for pcl_idx in tqdm.tqdm(pcl_valid_idxs):
-        if pcl_idx % 20 == 0:
-            pcl_fp = os.path.join(pcl_dir, '{:06d}.npy'.format(pcl_idx))
-            pcl = torch.from_numpy(np.load(pcl_fp)).to(config['device']).float()
+#     ## viz loop ##
+#     for pcl_idx in tqdm.tqdm(pcl_valid_idxs):
+#         if pcl_idx % 20 == 0:
+#             pcl_fp = os.path.join(pcl_dir, '{:06d}.npy'.format(pcl_idx))
+#             pcl = torch.from_numpy(np.load(pcl_fp)).to(config['device']).float()
 
-            pcl_dists = torch.linalg.norm(pcl[:, :3], dim=-1)
-            pcl_mask = (pcl_dists > config['pcl_mindist']) & (pcl_dists < config['pcl_maxdist'])
-            pcl = pcl[pcl_mask]
+#             pcl_dists = torch.linalg.norm(pcl[:, :3], dim=-1)
+#             pcl_mask = (pcl_dists > config['pcl_mindist']) & (pcl_dists < config['pcl_maxdist'])
+#             pcl = pcl[pcl_mask]
 
-            pcl = pcl[:, :3] #assume first three are [x,y,z]
+#             pcl = pcl[:, :3] #assume first three are [x,y,z]
 
-            img_idx = pcl_img_argmin[pcl_idx]
-            img_fp = os.path.join(img_dir, '{:06d}.png'.format(img_idx))
-            img = cv2.imread(img_fp)
-            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)/255.
+#             img_idx = pcl_img_argmin[pcl_idx]
+#             img_fp = os.path.join(img_dir, '{:06d}.png'.format(img_idx))
+#             img = cv2.imread(img_fp)
+#             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)/255.
 
-            dino_feats = dino(img)[0]
+#             dino_feats = dino(img)[0]
 
-            extent = (
-                0,
-                dino_feats.shape[1],
-                0,
-                dino_feats.shape[0]
-            )
+#             extent = (
+#                 0,
+#                 dino_feats.shape[1],
+#                 0,
+#                 dino_feats.shape[0]
+#             )
 
-            dino_feats_norm = dino_feats.view(-1, dino_feats.shape[-1]) - feat_mean.view(1, -1)
-            dino_feats_pca = dino_feats_norm.unsqueeze(1) @ V.unsqueeze(0)
-            dino_feats = dino_feats_pca.view(dino_feats.shape[0], dino_feats.shape[1], config['pca_nfeats'])
+#             dino_feats_norm = dino_feats.view(-1, dino_feats.shape[-1]) - feat_mean.view(1, -1)
+#             dino_feats_pca = dino_feats_norm.unsqueeze(1) @ V.unsqueeze(0)
+#             dino_feats = dino_feats_pca.view(dino_feats.shape[0], dino_feats.shape[1], config['pca_nfeats'])
 
-            #project points into image space
-            dino_rx = img.shape[1] / dino.output_size[0]
-            dino_ry = img.shape[0] / dino.output_size[1]
-            dino_intrinsics = intrinsics.clone()
-            dino_intrinsics[0, 0] /= dino_rx
-            dino_intrinsics[0, 2] /= dino_rx
-            dino_intrinsics[1, 1] /= dino_ry
-            dino_intrinsics[1, 2] /= dino_ry
+#             #project points into image space
+#             dino_rx = img.shape[1] / dino.output_size[0]
+#             dino_ry = img.shape[0] / dino.output_size[1]
+#             dino_intrinsics = intrinsics.clone()
+#             dino_intrinsics[0, 0] /= dino_rx
+#             dino_intrinsics[0, 2] /= dino_rx
+#             dino_intrinsics[1, 1] /= dino_ry
+#             dino_intrinsics[1, 2] /= dino_ry
 
-            print(dino_intrinsics, extrinsics)
+#             print(dino_intrinsics, extrinsics)
 
-            P = obtain_projection_matrix(dino_intrinsics, extrinsics).to(config['device'])
-            pcl_pixel_coords = get_pixel_from_3D_source(pcl, P)
-            pcl_in_frame, pixels_in_frame, ind_in_frame = get_points_and_pixels_in_frame(pcl, pcl_pixel_coords, dino_feats.shape[0], dino_feats.shape[1])
+#             P = obtain_projection_matrix(dino_intrinsics, extrinsics).to(config['device'])
+#             pcl_pixel_coords = get_pixel_from_3D_source(pcl, P)
+#             pcl_in_frame, pixels_in_frame, ind_in_frame = get_points_and_pixels_in_frame(pcl, pcl_pixel_coords, dino_feats.shape[0], dino_feats.shape[1])
 
-            pcl_px_in_frame = pcl_pixel_coords[ind_in_frame]
-            dino_idxs = pixels_in_frame.unique(dim=0) #only get feats with a lidar return
+#             pcl_px_in_frame = pcl_pixel_coords[ind_in_frame]
+#             dino_idxs = pixels_in_frame.unique(dim=0) #only get feats with a lidar return
 
-            fig, axs = plt.subplots(2, 2, figsize=(32, 24))
-            axs = axs.flatten()
-            dino_viz = dino_feats[..., :3]
-            vmin = dino_viz.view(-1, 3).min(dim=0)[0].view(1,1,3)
-            vmax = dino_viz.view(-1, 3).max(dim=0)[0].view(1,1,3)
-            dino_viz = (dino_viz-vmin)/(vmax-vmin)
+#             fig, axs = plt.subplots(2, 2, figsize=(32, 24))
+#             axs = axs.flatten()
+#             dino_viz = dino_feats[..., :3]
+#             vmin = dino_viz.view(-1, 3).min(dim=0)[0].view(1,1,3)
+#             vmax = dino_viz.view(-1, 3).max(dim=0)[0].view(1,1,3)
+#             dino_viz = (dino_viz-vmin)/(vmax-vmin)
 
-            axs[0].imshow(img, extent=extent)
-#            axs[0].imshow(dino_viz.cpu(), alpha=0.5, extent=extent)
-#            axs[0].scatter(pcl_px_in_frame[:, 0].cpu(), dino_feats.shape[0]-pcl_px_in_frame[:, 1].cpu(), s=1., alpha=0.5)
+#             axs[0].imshow(img, extent=extent)
+# #            axs[0].imshow(dino_viz.cpu(), alpha=0.5, extent=extent)
+# #            axs[0].scatter(pcl_px_in_frame[:, 0].cpu(), dino_feats.shape[0]-pcl_px_in_frame[:, 1].cpu(), s=1., alpha=0.5)
 
-            axs[1].imshow(img, extent=extent)
-            axs[1].imshow(dino_viz.cpu(), alpha=0.5, extent=extent)
+#             axs[1].imshow(img, extent=extent)
+#             axs[1].imshow(dino_viz.cpu(), alpha=0.5, extent=extent)
 
-            mask = torch.zeros_like(dino_viz[..., 0])
-            mask[dino_idxs[:, 1], dino_idxs[:, 0]] = 1.
-            axs[2].imshow(mask.cpu())
+#             mask = torch.zeros_like(dino_viz[..., 0])
+#             mask[dino_idxs[:, 1], dino_idxs[:, 0]] = 1.
+#             axs[2].imshow(mask.cpu())
 
-            axs[3].imshow(dino_viz.cpu(), alpha=1., extent=extent)
+#             axs[3].imshow(dino_viz.cpu(), alpha=1., extent=extent)
 
-            plt.show()
+#             plt.show()

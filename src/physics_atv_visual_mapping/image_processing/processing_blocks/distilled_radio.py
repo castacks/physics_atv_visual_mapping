@@ -58,11 +58,28 @@ class DistilledRadioBlock(ImageProcessingBlock):
         return img.unsqueeze(0)
 
     def run(self, image, intrinsics, image_orig):
-
         with torch.no_grad():
             img = self.preprocess(image)
             efficientnet_output, student_features, student_img = self.student_model(img)
-            student_features = F.normalize(student_features, dim=-1)
+            # print("student feat shape, dtype:", student_features.shape, student_features.dtype)
+            # print("student feat min", torch.min(student_features[0, :, :, :]))
+            # print("student feat max", torch.max(student_features[0, :, :, :]))
+            # print("student feat mean", torch.mean(student_features[0, :, :, :]))
+            # print("student feat std", torch.std(student_features[0, :, :, :]))
+            # print("student img min", torch.min(student_img[0, :, :, :]))
+            # print("student img max", torch.max(student_img[0, :, :, :]))
+            # print("student img mean", torch.mean(student_img[0, :, :, :]))
+            # print("student img std", torch.std(student_img[0, :, :, :]))
+            student_features = F.normalize(student_features, dim=1) # this was -1 you bafoon
+            # student_img = F.normalize(student_img, dim=1) # because dino does the same
+            # print("student feat min normalised", torch.min(student_features[0, :, :, :]))
+            # print("student feat max normalised", torch.max(student_features[0, :, :, :]))
+            # print("student feat mean normalised", torch.mean(student_features[0, :, :, :]))
+            # print("student feat std normalised", torch.std(student_features[0, :, :, :]))
+            # print("student img min normalised", torch.min(student_img[0, :, :, :]))
+            # print("student img max normalised", torch.max(student_img[0, :, :, :]))
+            # print("student img mean normalised", torch.mean(student_img[0, :, :, :]))
+            # print("student img std normalised", torch.std(student_img[0, :, :, :]))
 
         # crop intrinsics
         intrinsics[:, 0, 2] -= self.crop_w

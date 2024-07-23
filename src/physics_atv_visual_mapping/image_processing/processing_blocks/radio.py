@@ -33,12 +33,18 @@ class RadioBlock(ImageProcessingBlock):
 
         with torch.no_grad():
             img = self.preprocess(image)
-            # print(img.dtype)
             summary, img = self.radio(img)
-            # print(img.dtype)
-            # print(img.shape)
+            # print("radio shape, dtype:", img.shape, img.dtype)
+            # print("radio min value:", torch.min(img[0,:,:]))
+            # print("radio max value:", torch.max(img[0,:,:]))
+            # print("radio mean value:", torch.mean(img[0,:,:]))
+            # print("radio std value:", torch.std(img[0,:,:]))      
+            #TODO should we normalize? # NO! already layer normed
             img = F.normalize(img, dim=-1)
-            #TODO should we normalize?
+            # print("radio min value normalised:", torch.min(img[0,:,:]))
+            # print("radio max value normalised:", torch.max(img[0,:,:]))
+            # print("radio mean value normalised:", torch.mean(img[0,:,:]))
+            # print("radio std value normalised:", torch.std(img[0,:,:]))
             img_out = img.view(img.shape[0], self.output_size[1], self.output_size[0], -1).permute(0,3,1,2)
 
         ix = image.shape[3]

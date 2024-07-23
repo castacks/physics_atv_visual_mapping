@@ -108,9 +108,10 @@ class DinoV2ExtractFeatures:
         with torch.no_grad():
             img = self.preprocess(img)
             res = self.dino_model(img)
+            print("res shape, dtype:", res.shape, res.dtype)
             if self.use_cls:
                 res = self._hook_out
-            else:
+            else: # here
                 res = self._hook_out[:, 1:, ...]
             if self.facet in ["query", "key", "value"]:
                 d_len = res.shape[2] // 3
@@ -118,12 +119,21 @@ class DinoV2ExtractFeatures:
                     res = res[:, :, :d_len]
                 elif self.facet == "key":
                     res = res[:, :, d_len:2*d_len]
-                else:
+                else: # here
                     res = res[:, :, 2*d_len:]
+        # print("dino shape, dtype:", res.shape, res.dtype)
+        # print("dino res shape: ", res.shape)         
+        # print("dino min value:", torch.min(res[0,:,:]))
+        # print("dino max value:", torch.max(res[0,:,:]))
+        # print("dino mean value:", torch.mean(res[0,:,:]))
+        # print("dino std value:", torch.std(res[0,:,:]))     
         if self.norm_descs:
             res = F.normalize(res, dim=-1)
         self._hook_out = None   # Reset the hook
-
+        # print("dino min value normalised:", torch.min(res[0,:,:]))
+        # print("dino max value normalised:", torch.max(res[0,:,:]))
+        # print("dino mean value normalised:", torch.mean(res[0,:,:]))
+        # print("dino std value normalised:", torch.std(res[0,:,:]))   
         #switch back to channels-first
         return res.view(img.shape[0], self.output_size[1], self.output_size[0], -1).permute(0,3,1,2)
 

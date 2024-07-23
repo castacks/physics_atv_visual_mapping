@@ -11,7 +11,7 @@ image_processing:
     -
         type: distilled_radio
         args:
-            run_path: /home/physics_atv/visual_feature_distiller/runs/wandb/denim-wind-16/
+            run_path: /home/physics_atv/visual_feature_distiller/runs/wandb/astral-sun-23/
             best: True
 
 pca_nfeats: 16 #reduce output feats to this dim

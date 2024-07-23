@@ -26,7 +26,7 @@ image_processing:
         type: distilled_radio
         args:
             # run_path: /home/physics_atv/visual_feature_distiller/runs/wandb/astral-sun-23/
-            run_path: /home/physics_atv/physics_atv_ws/src/perception/physics_atv_visual_mapping/visual_feature_distiller/runs/wandb/astral-sun-23/
+            run_path: /home/physics_atv/physics_atv_ws/src/perception/physics_atv_visual_mapping/dsitilled_models/astral-sun-23/
             best: True
     - 
         type: pca

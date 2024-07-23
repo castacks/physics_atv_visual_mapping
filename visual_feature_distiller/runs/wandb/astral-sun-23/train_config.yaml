@@ -1,0 +1,44 @@
+notes: MOAR DATA
+
+# Logging Params
+USE_WANDB: True
+
+# Training Params
+batch_size: 8
+learning_rate: 0.0005 # 0.001, 0.0005, 0.0001, 0.00005
+num_epochs: 200
+scheduler_factor: 0.25
+scheduler_patience: 2
+early_stop_patience: 5
+loss_type: MSELoss # MSELoss CosineEmbeddingLoss
+log_interval: 50 # number of iterations
+train_data_dir: /home/physics_atv/rosbags/dino_efficientnet/
+val_data_dir: /home/physics_atv/workspace/datasets/highres_rgb_planefit/post_rbag_to_dset/
+train_sample_size: 2048 # number of samples per epoch
+val_sample_size: 256 # number of samples per epoch
+load_model_dir: null
+device: cuda
+
+# Input Params
+image_size: [1024, 544] # size of raw image
+crop_w: 64
+crop_h_low: 32
+crop_h_high: 32
+image_insize: [640, 512] # size of input to student, w x h same as stereonet, /32 for efficientnet
+# image_insize: [480, 384] # [320, 256] # size of input to student, w x h /1.6 of stereonet, /32 for efficientnet
+
+# Student Params
+image_encoder_name: efficientnet-b4
+pretrained_image_encoder: True
+feature_channels: 16
+# upsample: 3 # 0 to 5 (0: no upsampling, 5: max upsampling)
+feature_encoder_name: InterpolateAreaSimpleEncoder
+
+# Teacher Params (Format from physics_atv_visual_mapping image_pipeline)
+image_processing:
+    -
+        type: radio
+        args:
+            radio_type: radio_v2.1 # radio_v2 e-radio_v2
+            image_insize: [640, 512] # Original Image Size must be divisible by 16
+            # image_insize: [480, 384] # Original Image Size must be divisible by 16

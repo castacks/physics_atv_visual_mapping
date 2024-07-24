@@ -9,3 +9,4 @@
 **/eval_physics_model/**
 *.png
 /models/**
+distilled_models/**

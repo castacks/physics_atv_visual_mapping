@@ -25,23 +25,24 @@ image_processing:
     -
         type: distilled_radio
         args:
-            # run_path: /home/physics_atv/visual_feature_distiller/runs/wandb/astral-sun-23/
-            run_path: /home/physics_atv/physics_atv_ws/src/perception/physics_atv_visual_mapping/distilled_models/astral-sun-23/
+            #run_path: /home/physics_atv/physics_atv_ws/src/perception/physics_atv_visual_mapping/distilled_models/astral-sun-23/
+            run_path: /home/physics_atv/physics_atv_ws/src/perception/physics_atv_visual_mapping/distilled_models/curious-glitter-29/
             best: True
     - 
         type: pca
         args:
-            fp: /home/physics_atv/physics_atv_ws/src/perception/physics_atv_visual_mapping/data/pca/distilled_radio_16.pt
+            #fp: /home/physics_atv/physics_atv_ws/src/perception/physics_atv_visual_mapping/data/pca/distilled_radio_16_astral-sun-23.pt
+            fp: /home/physics_atv/physics_atv_ws/src/perception/physics_atv_visual_mapping/data/pca/distilled_radio_16_curious-glitter-29.pt
 
 localmapping:
     layer_key: distilled_radio
 
     ema: 0.5 #higher->use recent more
     metadata:
-        origin: [-40., -40.]
-        length_x: 80.
-        length_y: 80.
-        resolution: 0.5
+        origin: [-25., -25.]
+        length_x: 50.
+        length_y: 50.
+        resolution: 0.2
 
 device: cuda
 #viz: True

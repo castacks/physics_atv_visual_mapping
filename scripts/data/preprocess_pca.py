@@ -46,9 +46,6 @@ if __name__ == '__main__':
     
     dino_buf = []
     for folder in os.listdir(args.data_dir):
-        import random # lol i have too much data, not enough gpu ram
-        if random.random() < 0.5:
-            continue
         odom_dir = os.path.join(args.data_dir, folder, config['odometry']['folder'])
         poses = np.load(os.path.join(odom_dir, 'odometry.npy'))
         pose_ts = np.loadtxt(os.path.join(odom_dir, 'timestamps.txt'))
@@ -75,7 +72,7 @@ if __name__ == '__main__':
 
 
         for pcl_idx in tqdm.tqdm(pcl_valid_idxs):
-            if pcl_idx % 10 == 0:
+            if pcl_idx % 100 == 0:
                 pcl_fp = os.path.join(pcl_dir, '{:06d}.npy'.format(pcl_idx))
                 pcl = torch.from_numpy(np.load(pcl_fp)).to(config['device']).float()
 

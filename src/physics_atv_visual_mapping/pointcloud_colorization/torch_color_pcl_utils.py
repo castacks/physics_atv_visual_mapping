@@ -127,7 +127,7 @@ def get_pixel_from_3D_source(lidar_points, P):
     return pixel_coordinates
 
 
-def get_points_and_pixels_in_frame(lidar_points, pixel_coordinates, image_height, image_width):
+def get_points_and_pixels_in_frame(lidar_points, pixel_coordinates, image_height, image_width, height_thresh = 10.0):
     '''Returns a) array of pixels that lie inside image frame, b) indices of these pixels in the input pixel_coordinates array (to then match with pointcloud).
 
     Args:
@@ -162,7 +162,7 @@ def get_points_and_pixels_in_frame(lidar_points, pixel_coordinates, image_height
     ## Make sure lidar points are in front of camera
     cond5 = lidar_points_x > 0
     ## Don't count points above a certain height
-    cond6 = lidar_points_z < 10
+    cond6 = lidar_points_z < height_thresh
 
     ind_in_frame = cond1 & cond2 & cond3 & cond4 & cond5 & cond6
 

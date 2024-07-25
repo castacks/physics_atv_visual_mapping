@@ -11,6 +11,7 @@ from physics_atv_visual_mapping.image_processing.image_pipeline import setup_ima
 from physics_atv_visual_mapping.geometry_utils import TrajectoryInterpolator
 from physics_atv_visual_mapping.pointcloud_colorization.torch_color_pcl_utils import *
 from physics_atv_visual_mapping.utils import pose_to_htm
+from physics_atv_visual_mapping.image_processing.anyloc_utils import VLAD
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -72,7 +73,7 @@ if __name__ == '__main__':
 
 
         for pcl_idx in tqdm.tqdm(pcl_valid_idxs):
-            if pcl_idx % 100 == 0:
+            if pcl_idx % 20 == 0:
                 pcl_fp = os.path.join(pcl_dir, '{:06d}.npy'.format(pcl_idx))
                 pcl = torch.from_numpy(np.load(pcl_fp)).to(config['device']).float()
 
@@ -127,6 +128,13 @@ if __name__ == '__main__':
             """
 
     dino_buf = torch.cat(dino_buf, dim=0)
+    
+    # VLAD start
+    N_CLUSTERS = 8
+    vlad = VLAD(N_CLUSTERS, desc_dim=None,cache_dir='./data/dino_clusters/' + str(N_CLUSTERS) + '_clusters' + '_distilled-radio', override_cache=True)
+    vlad.fit(dino_buf)
+    # VLAD end
+    
     feat_mean = dino_buf.mean(dim=0)
     dino_feats_norm = dino_buf - feat_mean.unsqueeze(0)
 

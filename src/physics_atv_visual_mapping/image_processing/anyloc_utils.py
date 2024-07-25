@@ -108,7 +108,7 @@ class DinoV2ExtractFeatures:
         with torch.no_grad():
             img = self.preprocess(img)
             res = self.dino_model(img)
-            print("res shape, dtype:", res.shape, res.dtype)
+            # print("res shape, dtype:", res.shape, res.dtype)
             if self.use_cls:
                 res = self._hook_out
             else: # here

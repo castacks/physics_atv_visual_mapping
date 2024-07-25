@@ -325,7 +325,7 @@ def main():
 
     # Subscribe to the three PointCloud topics
     rospy.Subscriber("/velodyne_1/velodyne_points", PointCloud2, pointcloud_callback1)
-    rospy.Subscriber("/velodyne_2/velodyne_points", PointCloud2, pointcloud_callback2)
+    # rospy.Subscriber("/velodyne_2/velodyne_points", PointCloud2, pointcloud_callback2)
     rospy.Subscriber("/livox/lidar", PointCloud2, pointcloud_callback3)
 
 

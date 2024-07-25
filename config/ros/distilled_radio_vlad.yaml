@@ -30,11 +30,10 @@ image_processing:
             run_path: /home/physics_atv/physics_atv_ws/src/perception/physics_atv_visual_mapping/distilled_models/curious-glitter-29/
             best: True
     - 
-        type: pca
+        type: vlad
         args:
-            #fp: /home/physics_atv/physics_atv_ws/src/perception/physics_atv_visual_mapping/data/pca/distilled_radio_16_astral-sun-23.pt
-            # fp: /home/physics_atv/physics_atv_ws/src/perception/physics_atv_visual_mapping/data/pca/distilled_radio_16_curious-glitter-29.pt
-            fp: /home/physics_atv/physics_atv_ws/src/perception/physics_atv_visual_mapping/curious-glitter-29.pt
+            n_clusters: 8
+            cache_dir: /home/physics_atv/physics_atv_ws/src/perception/physics_atv_visual_mapping/data/dino_clusters/8_clusters_distilled-radio
 
 localmapping:
     layer_key: distilled_radio

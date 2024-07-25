@@ -8,3 +8,6 @@
 *.vscode*
 **/eval_physics_model/**
 *.png
+*.pth
+distilled_models/**
+models/**

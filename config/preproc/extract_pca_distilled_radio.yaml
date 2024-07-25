@@ -1,0 +1,33 @@
+image:
+    folder: image_left_color
+
+pointcloud:
+    folder: full_cloud
+
+odometry:
+    folder: super_odom
+
+image_processing:
+    -
+        type: distilled_radio
+        args:
+            # run_path: /home/physics_atv/physics_atv_ws/src/perception/physics_atv_visual_mapping/distilled_models/astral-sun-23/
+            run_path: /home/physics_atv/physics_atv_ws/src/perception/physics_atv_visual_mapping/distilled_models/curious-glitter-29/
+            best: True
+
+pca_nfeats: 16 #reduce output feats to this dim
+
+pcl_mindist: 3.0
+pcl_maxdist: 50.0
+
+extrinsics:
+    # p: [0.0, 0.0, -0.127]
+    # q: [-0.549, 0.554, -0.445, -0.440] #xyzw
+    p: [0.17265, -0.15227, 0.05708]
+    q: [0.55940, -0.54718, 0.44603, 0.43442] #xyzw
+
+#this is for the original image size (we will auto-adjust to reflect image_insize)
+intrinsics:
+    K: [455.7750, 0., 497.1180, 0., 456.3191, 251.8580, 0., 0., 1.]
+    P: [477.6049499511719, 0.0, 499.5,  0.0, 477.6049499511719, 252.0,  0.0, 0.0, 1.0]
+device: cuda

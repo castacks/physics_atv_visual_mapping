@@ -85,7 +85,10 @@ if __name__ == '__main__':
 
                 img_idx = pcl_img_argmin[pcl_idx]
                 img_fp = os.path.join(img_dir, '{:06d}.png'.format(img_idx))
-                img = torch.tensor(cv2.imread(img_fp)).permute(2,0,1)
+
+                img = cv2.imread(img_fp)
+                img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB) # impt to convert to RGB and float /255
+                img = torch.tensor(img).permute(2,0,1).float()/255.
 
                 dino_feats, dino_intrinsics = pipeline.run(img.unsqueeze(0), intrinsics.unsqueeze(0))
                 dino_feats = dino_feats[0].permute(1,2,0)

@@ -9,7 +9,7 @@ odometry:
 
 image_processing:
     -
-        type: distilled_radio
+        type: distilled_model
         args:
             # run_path: /home/physics_atv/physics_atv_ws/src/perception/physics_atv_visual_mapping/distilled_models/astral-sun-23/
             run_path: /home/physics_atv/physics_atv_ws/src/perception/physics_atv_visual_mapping/distilled_models/curious-glitter-29/

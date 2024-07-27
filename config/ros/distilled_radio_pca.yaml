@@ -24,19 +24,17 @@ extrinsics:
 
 image_processing:
     -
-        type: distilled_radio
+        type: distilled_model
         args:
-            #run_path: /home/physics_atv/physics_atv_ws/src/perception/physics_atv_visual_mapping/distilled_models/astral-sun-23/
             run_path: /home/physics_atv/physics_atv_ws/src/perception/physics_atv_visual_mapping/distilled_models/curious-glitter-29/
             best: True
     - 
         type: pca
         args:
-            #fp: /home/physics_atv/physics_atv_ws/src/perception/physics_atv_visual_mapping/data/pca/distilled_radio_16_astral-sun-23.pt
             fp: /home/physics_atv/physics_atv_ws/src/perception/physics_atv_visual_mapping/data/pca/distilled_radio_16_curious-glitter-29.pt
 
 localmapping:
-    layer_key: distilled_radio
+    layer_key: distilled_radio_pca
 
     ema: 0.5 #higher->use recent more
     metadata:

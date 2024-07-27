@@ -24,7 +24,7 @@ extrinsics:
 
 image_processing:
     -
-        type: distilled_radio
+        type: distilled_model
         args:
             run_path: /home/physics_atv/physics_atv_ws/src/perception/physics_atv_visual_mapping/distilled_models/twilight-cherry-36/
             best: True
@@ -35,7 +35,7 @@ image_processing:
             cache_dir: /home/physics_atv/physics_atv_ws/src/perception/physics_atv_visual_mapping/data/dino_clusters/8_clusters_distilled_dino_twilight-cherry-36/
 
 localmapping:
-    layer_key: distilled_radio
+    layer_key: distilled_dino_vlad
 
     ema: 0.5 #higher->use recent more
     metadata:

@@ -8,7 +8,7 @@ import torch.nn.functional as F
 from physics_atv_visual_mapping.image_processing.processing_blocks.base import ImageProcessingBlock
 # import visual_feature_distiller
 
-class DistilledRadioBlock(ImageProcessingBlock):
+class DistilledModelBlock(ImageProcessingBlock):
     """
     Image processing block that runs dino on the image
     """
@@ -25,6 +25,8 @@ class DistilledRadioBlock(ImageProcessingBlock):
         self.crop_h_low = train_config['crop_h_low']
         self.crop_h_high = train_config['crop_h_high']
         image_insize = train_config['image_insize']
+        self.normalise_rgb = train_config.get('normalise_rgb', False)
+        self.teacher_type = train_config['image_processing'][0]['type']
         
         # HACK lifted from train_util.py in visual distllation 
         class CustomCropTransform(object):
@@ -60,7 +62,11 @@ class DistilledRadioBlock(ImageProcessingBlock):
     def run(self, image, intrinsics, image_orig):
         with torch.no_grad():
             img = self.preprocess(image)
-            efficientnet_output, student_features, student_img = self.student_model(img)
+            if self.normalise_rgb:
+                normalised_images = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])(img)
+                efficientnet_output, student_features, student_img = self.student_model(normalised_images)
+            else:
+                efficientnet_output, student_features, student_img = self.student_model(img)
             # print("student feat shape, dtype:", student_features.shape, student_features.dtype)
             # print("student feat min", torch.min(student_features[0, :, :, :]))
             # print("student feat max", torch.max(student_features[0, :, :, :]))
@@ -70,8 +76,9 @@ class DistilledRadioBlock(ImageProcessingBlock):
             # print("student img max", torch.max(student_img[0, :, :, :]))
             # print("student img mean", torch.mean(student_img[0, :, :, :]))
             # print("student img std", torch.std(student_img[0, :, :, :]))
-            student_features = F.normalize(student_features, dim=1) # this was -1 you bafoon
-            # student_img = F.normalize(student_img, dim=1) # because dino does the same
+            if self.teacher_type == 'dino' or self.teacher_type == 'radio':
+                student_features = F.normalize(student_features, dim=1)
+                # student_img = F.normalize(student_img, dim=1) # because dino does the same
             # print("student feat min normalised", torch.min(student_features[0, :, :, :]))
             # print("student feat max normalised", torch.max(student_features[0, :, :, :]))
             # print("student feat mean normalised", torch.mean(student_features[0, :, :, :]))

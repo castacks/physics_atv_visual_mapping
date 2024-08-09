@@ -26,12 +26,14 @@ image_processing:
     -
         type: distilled_model
         args:
-            run_path: /home/physics_atv/physics_atv_ws/src/perception/physics_atv_visual_mapping/distilled_models/curious-glitter-29/
+            # run_path: /home/physics_atv/physics_atv_ws/src/perception/physics_atv_visual_mapping/distilled_models/curious-glitter-29/
+            run_path: /home/physics_atv/physics_atv_ws/src/perception/physics_atv_visual_mapping/distilled_models/rich-tree-77/
             best: True
     - 
         type: pca
         args:
-            fp: /home/physics_atv/physics_atv_ws/src/perception/physics_atv_visual_mapping/data/pca/distilled_radio_16_curious-glitter-29.pt
+            # fp: /home/physics_atv/physics_atv_ws/src/perception/physics_atv_visual_mapping/data/pca/distilled_radio_16_curious-glitter-29.pt
+            fp: /home/physics_atv/physics_atv_ws/src/perception/physics_atv_visual_mapping/data/pca/distilled_radio_16_rich-tree-77.pt
 
 localmapping:
     layer_key: distilled_radio_pca

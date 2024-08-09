@@ -3,6 +3,8 @@ import torch
 import rospkg
 import torchvision
 import torch.nn.functional as F
+# from ptflops import get_model_complexity_info
+# from thop import profile
 
 from physics_atv_visual_mapping.image_processing.processing_blocks.base import ImageProcessingBlock
 
@@ -20,8 +22,19 @@ class RadioBlock(ImageProcessingBlock):
             radio.model.set_optimal_window_size([image_insize[1], image_insize[0]])
 
         self.radio = radio.to(device).eval()
+        
+        # input_tensor = torch.randn(1, 3, self.input_size[1], self.input_size[0]) .to(device)  # Replace with appropriate input size
+        # flops, params = profile(self.radio, inputs=(input_tensor,))
+        # print(f"FLOPs: {flops}")
+        # print(f"Params: {params}")
+        
+        # input_size = (3, self.input_size[1], self.input_size[0]) 
+        # flops, params = get_model_complexity_info(self.radio, input_size, as_strings=True, print_per_layer_stat=True)
 
-
+        # print(f"Radio Type: {radio_type}")
+        # print(f"FLOPs: {flops}")
+        # print(f"Params: {params}")
+        
     def preprocess(self, img):
         assert len(img.shape) == 4, 'need to batch images'
         assert img.shape[1] == 3, 'expects channels-first'

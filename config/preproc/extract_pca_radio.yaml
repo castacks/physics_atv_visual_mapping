@@ -9,11 +9,10 @@ odometry:
 
 image_processing:
     -
-        type: distilled_model
+        type: radio
         args:
-            # run_path: /home/physics_atv/physics_atv_ws/src/perception/physics_atv_visual_mapping/distilled_models/curious-glitter-29/
-            run_path: /home/physics_atv/physics_atv_ws/src/perception/physics_atv_visual_mapping/distilled_models/rich-tree-77/
-            best: True
+            radio_type: radio_v2.5-l # radio_v2 e-radio_v2
+            image_insize: [640, 512]  # Original Image Size must be divisible by 16
 
 pca_nfeats: 16 #reduce output feats to this dim
 

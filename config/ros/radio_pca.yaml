@@ -4,9 +4,9 @@ image:
     image_compressed: False
 
 pointcloud:
-    topic: /velodyne_1/velodyne_points
-    # topic: /full_cloud
-  #  topic: /coloroze_pcl_node/colorized_pcl
+    topic: /full_cloud
+    # topic: /velodyne_1/velodyne_points
+#    topic: /coloroze_pcl_node/colorized_pcl
 
 odometry:
     topic: /integrated_to_init
@@ -19,54 +19,30 @@ intrinsics:
     P: [477.6049499511719, 0.0, 499.5,  0.0, 477.6049499511719, 252.0,  0.0, 0.0, 1.0]
 
 extrinsics:
-   # p: [0.0, 0.0, -0.1274]
-   # q: [-0.549, 0.554, -0.445, -0.440] #xyzw
-
-    # p: [0.0, 0.4, -0.3]
-    # q: [0.569, -0.549, 0.416, 0.450] #xyzw
-
-    #NEW BEST
-    # p: [-0.10772, 0.07414, -0.15637]
-    # q: [0.55860, -0.54800, 0.42820, 0.45200] #xyzw
-
-    # p: [-0.10772, 0.07414, -0.15637]
-    # q: [0.56017, -0.54567, 0.43487, 0.44647] #xyzw
-
-    #NEW from Jeric
-    # p: [0.14397, -0.10793, -0.27834]
-    # q: [0.56175, -0.54742, 0.44230, 0.43490] #xyzw
-
     p: [0.17265, -0.15227, 0.05708]
-    # q: [0.55940, -0.54718, 0.44603, 0.43442] #xyzw
     q: [0.55940, -0.54718, 0.44603, 0.43442] #xyzw
-    # q: [0.55486, -0.55226, 0.44196, 0.43796]
 
-    # p: [0.10883, 0.26500, 0.20678]
-    # q: [-0.55162, 0.43980, -0.43711, 0.55787]
 
 image_processing:
     -
         type: radio
         args:
-            image_insize: [512, 512] #this should be the size of the input images
+            radio_type: radio_v2.5-b # radio_v2 e-radio_v2
+            image_insize: [640, 512]  # Original Image Size must be divisible by 16
     -
         type: pca
         args:
-            fp: /home/physics_atv/physics_atv_ws/src/perception/physics_atv_visual_mapping/data/pca/radio.pt
-
+            fp: /home/physics_atv/physics_atv_ws/src/perception/physics_atv_visual_mapping/data/pca/radiov2-5-b_16.pt
+            
 localmapping:
-    layer_key: radio
-    ema: 0.1 #higher->use recent more
-    metadata:
-        origin: [-40., -40.]
-        length_x: 80.
-        length_y: 80.
-        resolution: 0.5
+    layer_key: radio_pca
 
-       # origin: [-20., -20.]
-       # length_x: 40.
-       # length_y: 40.
-       # resolution: 0.1
+    ema: 0.5 #higher->use recent more
+    metadata:
+        origin: [-25., -25.]
+        length_x: 50.
+        length_y: 50.
+        resolution: 0.2
 
 device: cuda
 #viz: True

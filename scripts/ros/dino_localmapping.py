@@ -300,7 +300,7 @@ class DinoMappingNode:
         """
 
         #TODO: figure out how to support multiple viz output types
-        gridmap_rgb = gridmap_data[..., :3]
+        gridmap_rgb = gridmap_data[..., 1:4]
         vmin = gridmap_rgb.reshape(-1, 3).min(axis=0).reshape(1,1,3)
         vmax = gridmap_rgb.reshape(-1, 3).max(axis=0).reshape(1,1,3)
         gridmap_cs = (gridmap_rgb-vmin)/(vmax-vmin)

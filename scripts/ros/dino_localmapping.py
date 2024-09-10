@@ -198,12 +198,20 @@ class DinoMappingNode:
             'known': known_mask,
             'metadata': metadata_out
         }
+        
+        # Make all of known_mask = 1
+        # localmap_update['known'] = torch.ones_like(localmap_update['known'])
+        # import pdb; pdb.set_trace()
+        height = localmap[:,:,0]
+        height[~localmap_update['known']] = -2
+        localmap[:,:,0] = height
+        localmap_update['data'] = localmap
 
-        if self.localmap is None:
-            return localmap_update
+        # if self.localmap is None:
+        return localmap_update
 
-        else:
-            return aggregate_localmaps(localmap_update, self.localmap, ema=self.localmap_ema)
+        # else:
+        #     return aggregate_localmaps(localmap_update, self.localmap, ema=self.localmap_ema)
 
     def make_gridmap_msg(self, localmap):
         """

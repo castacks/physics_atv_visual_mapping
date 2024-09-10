@@ -1,26 +1,21 @@
 image:
-    image_topic: /zedx/zed_node/rgb/image_rect_color
-    camera_info_topic: /zedx/zed_node/rgb/camera_info
+    image_topic: /front_camera/image_raw
+    camera_info_topic: /front_camera/camera_info
     image_compressed: False
 
 pointcloud:
-    # topic: /velodyne_1/velodyne_points
-    # topic: /full_cloud # velodyne_1
-  #  topic: /coloroze_pcl_node/colorized_pcl
-    topic: /zedx/zed_node/point_cloud/cloud_registered
-    # topic: /pcl_downsampled
+    topic: /synced_pointcloud
 
 odometry:
-    # topic: /integrated_to_init # frame_id: sensor_init
-    topic: /zedx/zed_node/odom
+    topic: /odom # frame_id /odom
 
 gridmap:
     topic: local_gridmap
 
 intrinsics:
 
-    K: [366.83514404296875, 0.0, 492.81915283203125, 0.0, 366.83514404296875, 317.6390075683594, 0.0, 0.0, 1.0]
-    P: [146.71441650390625, 0.0, 197.1288604736328, 0.0, 146.71441650390625, 127.05476379394531, 0.0,  0.0, 1.0]
+    K: [407.86023253, 0.0, 533.30109486, 0.0, 407.86605705, 278.69939958, 0.0, 0.0, 1.0]
+    P: [407.86023253, 0.0, 533.30109486, 0.0, 407.86605705, 278.69939958, 0.0, 0.0, 1.0]
 
 
 extrinsics:
@@ -45,22 +40,18 @@ image_processing:
 
 localmapping:
     layer_key: VLAD
-    ema: .4 #higher->use recent more
+    ema: 1 #higher->use recent more
     metadata:
-        # origin: [-40., -40.]
-        # length_x: 80.
-        # length_y: 80.
-        # resolution: 0.5
 
-       origin: [-8., -8.]
-       length_x: 16.
-       length_y: 16.
-       resolution: 0.05
+    #    origin: [-8., -8.]
+    #    length_x: 16.
+    #    length_y: 16.
+    #    resolution: 0.05
 
-       # origin: [-20., -20.]
-       # length_x: 40.
-       # length_y: 40.
-       # resolution: 0.125
+       origin: [-20., -20.]
+       length_x: 40.
+       length_y: 40.
+       resolution: 0.125
 
 device: cuda
 #viz: True

@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+
+<launch>
+
+    <node pkg="tf" type="static_transform_publisher" name="map_to_odom" args="0 0 0 0 0 0 map odom 100"/>
+
+    <node pkg="physics_atv_visual_mapping" type="pub_odom_tf.py" name="pub_odom_tf"/>
+
+
+    <node pkg="tf" type="static_transform_publisher" name="baselink_to_frontcamera" args="0 0 0  1.5708 3.1416 1.5708 base_link front_camera 100"/>
+
+</launch>

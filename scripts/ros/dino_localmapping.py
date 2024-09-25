@@ -54,7 +54,10 @@ class DinoMappingNode:
         else:
             self.image_sub = rospy.Subscriber(config['image']['image_topic'], Image, self.handle_img, queue_size=1)
 
-        self.intrinsics = torch.tensor(rospy.wait_for_message(config['image']['camera_info_topic'], CameraInfo).K, device=config['device']).reshape(3,3).float()
+        if 'rect' in config['image']['image_topic']:
+            self.intrinsics = torch.tensor(config['intrinsics']['P'], device=config['device']).reshape(3,3).float()
+        else:
+            self.intrinsics = torch.tensor(config['intrinsics']['K'], device=config['device']).reshape(3,3).float()
 
         self.dino_intrinsics = None
 
@@ -65,6 +68,11 @@ class DinoMappingNode:
 
         self.pcl_sub = rospy.Subscriber(config['pointcloud']['topic'], PointCloud2, self.handle_pointcloud, queue_size=1)
         self.odom_sub = rospy.Subscriber(config['odometry']['topic'], Odometry, self.handle_odom, queue_size=10)
+
+        if 'frame' in config['pointcloud']:
+            self.pcl_frame_remap = config['pointcloud']['frame']
+        else:
+            self.pcl_frame_remap = None
 
         self.pcl_pub = rospy.Publisher('/dino_pcl', PointCloud2, queue_size=1)
         self.gridmap_pub = rospy.Publisher('/dino_gridmap', GridMap, queue_size=1)
@@ -83,7 +91,7 @@ class DinoMappingNode:
     def handle_pointcloud(self, msg):
         #temp hack
         self.pcl_msg = msg
-        self.pcl_msg.header.frame_id = 'vehicle'
+        self.pcl_msg.header.frame_id = self.pcl_frame_remap
 
     def handle_odom(self, msg):
         if self.odom_frame is None:
@@ -147,19 +155,13 @@ class DinoMappingNode:
         else:
             img = self.bridge.imgmsg_to_cv2(self.img_msg, desired_encoding='rgb8').astype(np.float32)/255.
 
-        img = torch.tensor(img).unsqueeze(0).permute(0,3,1,2)
+        img = torch.from_numpy(img).unsqueeze(0).permute(0,3,1,2)
 
         dino_img, dino_intrinsics = self.image_pipeline.run(img, self.intrinsics.unsqueeze(0))
 
         #move back to channels-last
         dino_img = dino_img[0].permute(1,2,0)
         dino_intrinsics = dino_intrinsics[0]
-
-        #need to compute the transform from the odom frame to the image frame
-        #do it this way to account for pcl time sync
-        if not self.tf_buffer.can_transform(self.pcl_msg.header.frame_id, self.img_msg.header.frame_id, self.img_msg.header.stamp):
-            rospy.logwarn_throttle(1.0, 'cant tf from {} to {} at {}'.format(self.pcl_msg.header.frame_id, self.img_msg.header.frame_id, self.img_msg.header.stamp))
-            return None
 
         I = get_intrinsics(dino_intrinsics).to(self.device)
         E = get_extrinsics(self.extrinsics).to(self.device)

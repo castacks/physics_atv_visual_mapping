@@ -1,7 +1,0 @@
-<?xml version="1.0"?>
-
-<launch>
-    <node pkg="physics_atv_visual_mapping" type="visual_localmapping.py" name="visual_localmapping" output="screen">
-        <param name="config_fp" value="$(find physics_atv_visual_mapping)/config/sample.yaml"/>
-    </node>
-</launch>

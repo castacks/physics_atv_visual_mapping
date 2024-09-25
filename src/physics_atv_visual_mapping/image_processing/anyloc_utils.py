@@ -1,5 +1,7 @@
 # A portable utility module for the demo programs
 
+#taken from AnyLoc https://github.com/AnyLoc/AnyLoc
+#modified slightly for ease of use
 
 # %%
 import os
@@ -50,13 +52,15 @@ class DinoV2ExtractFeatures:
             - device:   PyTorch device to use
         """
         self.vit_type: str = dino_model
-        #self.dino_model: nn.Module = torch.hub.load(
-        #        'facebookresearch/dinov2', dino_model)
-        print(dino_dir,'________________________________________________________')
-        torch.hub.set_dir(dino_dir)
-        self.dino_model: nn.Module = torch.hub.load(
-                    dino_dir + '/facebookresearch_dinov2_main',dino_model,source='local')
-                #'/home/matthew/.cache/torch/hub/facebookresearch_dinov2_main', dino_model,source='local')
+
+        try:
+            torch.hub.set_dir(dino_dir)
+            self.dino_model: nn.Module = torch.hub.load(
+                        dino_dir + '/facebookresearch_dinov2_main',dino_model,source='local')
+        except:
+            print("DIDN'T FIND MODEL IN DINO DIRECTORY, LOADING FROM TORCHHUB")
+            self.dino_model: nn.Module = torch.hub.load(
+                   'facebookresearch/dinov2', dino_model)
 
         self.device = torch.device(device)
         self.dino_model.blocks = nn.Sequential(*list(self.dino_model.blocks.children())[:-1])
@@ -87,11 +91,6 @@ class DinoV2ExtractFeatures:
             self._hook_out = output
         return _forward_hook
 
-#    def preprocess(self, img):
-#        img = cv2.resize(img,(self.input_size[0],self.input_size[1]))
-#        img = torch.from_numpy(img).cuda().float()
-#        return img.unsqueeze(0).permute(0,3,1,2)
-
     def preprocess(self, img):
         assert len(img.shape) == 4, 'need to batch images'
         assert img.shape[1] == 3, 'expects channels-first'
@@ -99,7 +98,6 @@ class DinoV2ExtractFeatures:
         img = torchvision.transforms.functional.resize(img,(self.input_size[1],self.input_size[0]))
         return img
 
-#    def __call__(self, img: np.ndarray) -> torch.Tensor:
     def __call__(self, img: torch.Tensor) -> torch.Tensor:
         """
             Parameters:
@@ -416,99 +414,10 @@ class VLAD:
         # Normalize the VLAD vector
         if reduce:
             n_vlad = F.normalize(torch.sum(reduced_vlad,dim=0), dim=0)
-            # print('p3: ', time.perf_counter() - now)
-            print('p3: ', time.perf_counter() - tnow)
             return n_vlad
         else:
             n_vlad = F.normalize(un_vlad, dim=0)
             return n_vlad
-
-    # def generate(self, query_descs: Union[np.ndarray, torch.Tensor],
-    #             cache_id: Union[str, None]=None,reduce: bool=False, now=None) -> torch.Tensor:
-    #     """
-    #         Given the query descriptors, generate a VLAD vector. Call
-    #         `fit` before using this method. Use this for only single
-    #         images and with descriptors stacked. Use function
-    #         `generate_multi` for multiple images.
-    #
-    #         Parameters:
-    #         - query_descs:  Query descriptors of shape [n_q, desc_dim]
-    #                         where 'n_q' is number of 'desc_dim'
-    #                         dimensional descriptors in a query image.
-    #         - cache_id:     If not None, then the VLAD vector is
-    #                         constructed using the residual and labels
-    #                         from this file.
-    #
-    #         Returns:
-    #         - n_vlas:   Normalized VLAD: [num_clusters*desc_dim]
-    #     """
-    #     # print('p1: ', time.perf_counter() - now)
-    #     tnow = time.perf_counter()
-    #     residuals = self.generate_res_vec(query_descs, cache_id)
-    #     # Un-normalized VLAD vector: [c*d,]
-    #     un_vlad = torch.zeros(self.num_clusters * self.desc_dim)
-    #     # if reduce:
-    #     #     reduced_vlad = torch.zeros((self.num_clusters , self.desc_dim))
-    #
-    #     # print(self.vlad_mode)
-    #     if self.vlad_mode == 'hard':
-    #         # now = time.perf_counter()
-    #         # Get labels for assignment of descriptors
-    #         if cache_id is not None and self.can_use_cache_vlad() \
-    #                 and os.path.isfile(
-    #                     f"{self.cache_dir}/{cache_id}_l.pt"):
-    #             labels = torch.load(
-    #                     f"{self.cache_dir}/{cache_id}_l.pt")
-    #         else:
-    #             labels = self.kmeans.predict(query_descs)   # [q]
-    #             if cache_id is not None and self.can_use_cache_vlad():
-    #                 torch.save(labels,
-    #                         f"{self.cache_dir}/{cache_id}_l.pt")
-    #         # print('p1: ', time.perf_counter() - now)
-    #         # Create VLAD from residuals and labels
-    #         # used_clusters = set(labels.cpu().numpy())
-    #         # used_clusters = torch.unique(labels)
-    #         #residuals - 1024x10x768
-    #         # print(labels.shape)
-    #         reduced_vlad = scatter_add(residuals,labels,dim=0)[self.scatter_ids,self.scatter_ids, :]
-    #         reduced_vlad = F.normalize(reduced_vlad,dim=1)
-    #
-    #         # print('p2: ', time.perf_counter() - now)
-    #     else:       # Soft cluster assignment
-    #         # Cosine similarity: 1 = close, -1 = away
-    #         if cache_id is not None and self.can_use_cache_vlad() \
-    #                 and os.path.isfile(
-    #                     f"{self.cache_dir}/{cache_id}_s.pt"):
-    #             soft_assign = torch.load(
-    #                     f"{self.cache_dir}/{cache_id}_s.pt")
-    #         else:
-    #             cos_sims = F.cosine_similarity( # [q, c]
-    #                     ein.rearrange(query_descs, "q d -> q 1 d"),
-    #                     ein.rearrange(self.c_centers, "c d -> 1 c d"),
-    #                     dim=2)
-    #             soft_assign = F.softmax(self.soft_temp*cos_sims,
-    #                     dim=1)
-    #             if cache_id is not None and self.can_use_cache_vlad():
-    #                 torch.save(soft_assign,
-    #                         f"{self.cache_dir}/{cache_id}_s.pt")
-    #         # Soft assignment scores (as probabilities): [q, c]
-    #         for k in range(0, self.num_clusters):
-    #             w = ein.rearrange(soft_assign[:, k], "q -> q 1 1")
-    #             # Sum of residuals for all descriptors (for cluster k)
-    #             cd_sum = ein.rearrange(w * residuals,
-    #                         "q c d -> (q c) d").sum(dim=0)  # [d]
-    #             if self.intra_norm:
-    #                 cd_sum = F.normalize(cd_sum, dim=0)
-    #             un_vlad[k*self.desc_dim:(k+1)*self.desc_dim] = cd_sum
-    #     # Normalize the VLAD vector
-    #     if reduce:
-    #         n_vlad = F.normalize(torch.sum(reduced_vlad,dim=0), dim=0)
-    #         # print('p3: ', time.perf_counter() - now)
-    #         print('p3: ', time.perf_counter() - tnow)
-    #         return n_vlad
-    #     else:
-    #         n_vlad = F.normalize(un_vlad, dim=0)
-    #         return n_vlad
 
     def generate_multi(self,
             multi_query: Union[np.ndarray, torch.Tensor, list],

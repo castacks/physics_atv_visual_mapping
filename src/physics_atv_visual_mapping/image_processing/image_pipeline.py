@@ -8,8 +8,9 @@ from physics_atv_visual_mapping.image_processing.processing_blocks.sam import SA
 from physics_atv_visual_mapping.image_processing.processing_blocks.pca import PCABlock
 from physics_atv_visual_mapping.image_processing.processing_blocks.vlad import VLADBlock
 from physics_atv_visual_mapping.image_processing.processing_blocks.pca_vlad import PCAVLADBlock
-from physics_atv_visual_mapping.image_processing.processing_blocks.ganav import GANavBlock
+# from physics_atv_visual_mapping.image_processing.processing_blocks.ganav import GANavBlock
 from physics_atv_visual_mapping.image_processing.processing_blocks.featup import FeatUpBlock
+from physics_atv_visual_mapping.image_processing.processing_blocks.identity import IdentityBlock
 
 from physics_atv_visual_mapping.utils import normalize_dino
 
@@ -35,10 +36,12 @@ def setup_image_pipeline(config):
             block = VLADBlock(**block_config['args'])
         elif btype == 'pca_vlad':
             block = PCAVLADBlock(**block_config['args'])
-        elif btype == 'ganav':
-            block = GANavBlock(**block_config['args'])
+        # elif btype == 'ganav':
+            # block = GANavBlock(**block_config['args'])
         elif btype == 'featup':
             block = FeatUpBlock(**block_config['args'])
+        elif btype == 'identity':
+            block = IdentityBlock(**block_config['args'])
         else:
             print('Unsupported visual block type {}'.format(btype))
             exit(1)

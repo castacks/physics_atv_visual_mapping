@@ -24,19 +24,8 @@ extrinsics:
 
 image_processing:
     -
-        type: dino
-        args:
-            dino_type: dinov2_vitb14
-            dino_layer: 10
-            image_insize: [686, 364] #this should be the size of the input images
-            desc_facet: value
-#            desc_facet: token
-
-    -
-        type: vlad
-        args:
-            n_clusters: 8
-            cache_dir: /home/matthew/salon_ws/src/physics_atv_visual_mapping/data/dino_clusters/8_clusters_364x686_
+        type: identity
+        args: {}
 
 localmapping:
     layer_key: VLAD

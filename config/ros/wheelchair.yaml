@@ -1,0 +1,59 @@
+image:
+    image_topic: /zedx/zed_node/rgb/image_rect_color
+    camera_info_topic: /zedx/zed_node/rgb/camera_info
+    image_compressed: False
+
+pointcloud:
+    topic: /zedx/zed_node/point_cloud/cloud_registered
+    frame: base_link
+
+odometry:
+    topic: /zedx/zed_node/odom
+
+gridmap:
+    topic: local_gridmap
+
+intrinsics:
+    K: [366.83514404296875, 0.0, 492.81915283203125, 0.0, 366.83514404296875, 317.6390075683594, 0.0, 0.0, 1.0]
+    P: [146.71441650390625, 0.0, 197.1288604736328, 0.0, 146.71441650390625, 127.05476379394531, 0.0,  0.0, 1.0]
+
+
+extrinsics:
+    p: [0, 0, 0]
+    q: [0.5, -0.5, 0.5, 0.5]
+
+
+image_processing:
+      -
+          type: radio
+          args:
+              radio_type: radio_v2.5-b # radio_v2 e-radio_v2
+              image_insize: [720, 720]  # Original Image Size must be divisible by 16
+      -
+          type: vlad
+          args:
+              n_clusters: 8
+              cache_dir: /home/matthew/salon_ws/src/physics_atv_visual_mapping/data/dino_clusters/8_wheelchair_radio
+
+localmapping:
+    layer_key: VLAD
+    ema: .2 #higher->use recent more
+    metadata:
+        # origin: [-40., -40.]
+        # length_x: 80.
+        # length_y: 80.
+        # resolution: 0.5
+
+       origin: [-8., -8.]
+       length_x: 16.
+       length_y: 16.
+       resolution: 0.049999
+
+       # origin: [-20., -20.]
+       # length_x: 40.
+       # length_y: 40.
+       # resolution: 0.125
+
+device: cuda
+#viz: True
+viz: False

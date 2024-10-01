@@ -166,10 +166,10 @@ include_directories(
 ## Mark executable scripts (Python etc.) for installation
 ## in contrast to setup.py, you can choose the destination
 catkin_install_python(PROGRAMS
-  scripts/ros/visual_localmapping.py
+  #scripts/ros/visual_localmapping.py
   scripts/ros/dino_localmapping.py
-  scripts/ros/dino_colorization.py
-  scripts/ros/colorize_pcl_node_torch.py
+  #scripts/ros/dino_colorization.py
+  #scripts/ros/colorize_pcl_node_torch.py
   scripts/ros/cloud_repub.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )

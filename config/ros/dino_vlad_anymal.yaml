@@ -1,0 +1,51 @@
+image:
+    image_topic: /wide_angle_camera_rear/image_color_rect_resize #"wide_angle_camera_rear_camera_parent"
+    camera_info_topic: /wide_angle_camera_rear_resize/camera_info
+    image_compressed: False
+
+pointcloud:
+    topic: /point_cloud_filter/lidar/point_cloud_filtered #"lidar"
+
+odometry:
+    topic: /state_estimator/pose_in_odom
+
+gridmap:
+    topic: local_gridmap
+
+intrinsics:
+    P: [117.4071078849395, 0.0, 156.2221706119562, 0.0, 117.94467517660404, 112.4181538973062, 0.0, 0.0, 1.0]
+
+extrinsics:
+    p: [0.000, -0.138, -0.094]
+    q: [0.500, -0.500, 0.500, 0.500] ##xyzw?
+
+image_processing:
+    -
+        type: dino
+        args:
+            dino_type: dinov2_vitb14
+            dino_layer: 10
+            image_insize: [686, 364] #this should be the size of the input images
+            desc_facet: value
+#            desc_facet: token
+
+    -
+        type: vlad
+        args:
+            n_clusters: 8
+            cache_dir: /home/physics_atv/physics_atv_ws/src/perception/physics_atv_visual_mapping/data/dino_clusters/8_clusters_364x686_
+
+localmapping:
+    layer_key: VLAD
+    ema: 0.4 #higher->use recent more
+    metadata:
+
+
+       origin: [-8., -8.]
+       length_x: 16.
+       length_y: 16.
+       resolution: 0.07499
+
+device: cuda
+#viz: True
+viz: False

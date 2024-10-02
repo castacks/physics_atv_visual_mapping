@@ -168,6 +168,7 @@ include_directories(
 catkin_install_python(PROGRAMS
   #scripts/ros/visual_localmapping.py
   scripts/ros/dino_localmapping.py
+  scripts/ros/dino_localmapping_anymal.py
   #scripts/ros/dino_colorization.py
   #scripts/ros/colorize_pcl_node_torch.py
   scripts/ros/cloud_repub.py

@@ -81,8 +81,8 @@ class DinoMappingNode(Node):
 
     def handle_pointcloud(self, msg):
         self.pcl_msg = msg
-        # self.pcl_msg.header.frame_id = 'zed_camera_link' # TODO: parametrize
-        self.pcl_msg.header.frame_id = 'base_link'
+        self.pcl_msg.header.frame_id = 'zed_camera_link' # TODO: parametrize
+        # self.pcl_msg.header.frame_id = 'base_link'
 
     def handle_odom(self, msg):
         if self.odom_frame is None:
@@ -205,12 +205,13 @@ class DinoMappingNode(Node):
         gridmap_msg.header.stamp = self.img_msg.header.stamp
         gridmap_msg.header.frame_id = self.odom_frame
         
-        gridmap_msg.layers = ["VLAD_1", "VLAD_2", "VLAD_3", "VLAD_4", "VLAD_5", "VLAD_6", "VLAD_7", "VLAD_8"]
+        gridmap_msg.layers = ["VLAD_1", "VLAD_2", "VLAD_3", "VLAD_4", "VLAD_5", "VLAD_6", "VLAD_7", "VLAD_8","height"]
 
-        if self.layer_keys is None:
-            gridmap_msg.layers = ['{}_{}'.format(self.layer_key, i) for i in range(gridmap_data.shape[-1])]
-        else:
-            gridmap_msg.layers = copy.deepcopy(self.layer_keys)
+        # TODO (cherie): clean up below for self.layer_keys making
+        # if self.layer_keys is None:
+        #     gridmap_msg.layers = ['{}_{}'.format(self.layer_key, i) for i in range(gridmap_data.shape[-1])]
+        # else:
+        #     gridmap_msg.layers = copy.deepcopy(self.layer_keys)
             
 
         gridmap_msg.info.resolution = localmap['metadata']['resolution'].item()

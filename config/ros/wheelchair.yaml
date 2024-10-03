@@ -1,13 +1,13 @@
 image:
-    image_topic: /zedx/zed_node/rgb/image_rect_color
-    camera_info_topic: /zedx/zed_node/rgb/camera_info
+    image_topic: /zed/zed_node/rgb/image_rect_color
+    camera_info_topic: /zed/zed_node/rgb/camera_info
     image_compressed: False
 
 pointcloud:
-    topic: /zedx/zed_node/point_cloud/cloud_registered
+    topic: /zed/zed_node/point_cloud/cloud_registered
 
 odometry:
-    topic: /zedx/zed_node/odom
+    topic: /zed/zed_node/odom
 
 gridmap:
     topic: local_gridmap

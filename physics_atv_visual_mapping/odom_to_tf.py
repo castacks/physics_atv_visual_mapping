@@ -14,7 +14,7 @@ class OdometryToTF(Node):
         # Subscribe to the /odom topic
         self.odom_subscriber = self.create_subscription(
             Odometry,
-            '/zedx/zed_node/odom',
+            '/zed/zed_node/odom',
             self.handle_odom,
             10
         )

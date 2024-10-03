@@ -43,7 +43,7 @@ class LethalHeightCost(Node):
         self.odom_msg = msg
 
     def handle_map(self, msg):
-        print("handling map")
+        self.get_logger().info('handling map...')
         with self._lock:
             self.dino_map_msg = msg
             self.new_msg = True
@@ -60,11 +60,11 @@ class LethalHeightCost(Node):
         print('----')
         if self.odom_msg is not None:
             if not self.new_msg:
-                print('no new map')
+                self.get_logger().info('no new map')
                 return
 
             with self._lock:
-                print('got map')
+                self.get_logger().info('got map')
                 if self.dino_map_msg is not None:
                     info = self.dino_map_msg.info
                     header = self.dino_map_msg.header
@@ -83,24 +83,31 @@ class LethalHeightCost(Node):
                 print("NO MAP")
                 return
             
-            # avoid_data = torch.Tensor([19.873137, 21.889065, 25.708973, 21.219118,
-            #                25.76748,  24.824245, 24.676182, 26.892282]).cuda()
-            avoid_feature = torch.Tensor([22.887554, 21.481354, 22.915676, 19.23652,  23.831785, 21.27125,  19.956055, 22.428432]).cuda()
-            grass_feature = torch.Tensor([23.964779, 21.991943, 23.726662, 19.904432, 22.468143, 21.320164, 20.323324, 23.249199]).cuda()
-            # sidewalk_feature = torch.Tensor([23.582233, 22.66328,  16.452255, 22.246119, 24.866558, 21.518925, 22.776405, 20.603878]).cuda() # grey sidewalk
-            sidewalk_feature = torch.Tensor([[23.802433, 22.701805, 18.775259, 22.595041, 23.969284, 21.344238, 21.642178, 20.242914]]).cuda() # sand colored sidewalk
+            costmap_mode = 'height' # empty, height, features
+            if costmap_mode == 'features':
+                avoid_feature = torch.Tensor([22.887554, 21.481354, 22.915676, 19.23652,  23.831785, 21.27125,  19.956055, 22.428432]).cuda()
+                grass_feature = torch.Tensor([23.964779, 21.991943, 23.726662, 19.904432, 22.468143, 21.320164, 20.323324, 23.249199]).cuda()
+                # sidewalk_feature = torch.Tensor([23.582233, 22.66328,  16.452255, 22.246119, 24.866558, 21.518925, 22.776405, 20.603878]).cuda() # grey sidewalk
+                sidewalk_feature = torch.Tensor([[23.802433, 22.701805, 18.775259, 22.595041, 23.969284, 21.344238, 21.642178, 20.242914]]).cuda() # sand colored sidewalk
 
-            # costmap = gridmap['data'][0]
-            # costmap[:, :] = 0
-            avoid_similarity_map = self.pixelwise_euclidean_distance(torch.Tensor(gridmap['data']).cuda(), avoid_feature).cpu().numpy()
-            grass_sim_map = self.pixelwise_euclidean_distance(torch.Tensor(gridmap['data']).cuda(), grass_feature).cpu().numpy()
-            sidewalk_sim_map = self.pixelwise_euclidean_distance(torch.Tensor(gridmap['data']).cuda(), sidewalk_feature).cpu().numpy()
-            np.save('gridmap_data.npy', gridmap['data'])
-            # self.get_logger().info(f"similarity_map: {similarity_map}")
-            # costmap = similarity_map
-            
-            costmap = self.create_costmap(avoid_similarity_map, grass_sim_map, sidewalk_sim_map)
-            # costmap[:,:] = 0
+                gridmap_features = torch.Tensor(gridmap['data'][:8, ...]).cuda()
+                avoid_similarity_map = self.pixelwise_euclidean_distance(gridmap_features, avoid_feature).cpu().numpy()
+                grass_sim_map = self.pixelwise_euclidean_distance(gridmap_features, grass_feature).cpu().numpy()
+                sidewalk_sim_map = self.pixelwise_euclidean_distance(gridmap_features, sidewalk_feature).cpu().numpy()
+                # np.save('gridmap_data.npy', gridmap['data'])
+                # self.get_logger().info(f"similarity_map: {similarity_map}")
+                # costmap = similarity_map
+                
+                costmap = self.create_costmap(avoid_similarity_map, grass_sim_map, sidewalk_sim_map)
+            elif costmap_mode == 'empty':
+                costmap = gridmap['data'][0]
+                costmap[:,:] = 0
+            elif costmap_mode == 'height':
+                height_thresh = 0
+                costmap = (gridmap['data'][8] > height_thresh).astype(float) # TODO: ideallly later can query by keys
+            else:
+                raise NotImplementedError('costmap mode not yet implemented')
+                
             
             self.get_logger().info(f"Costmap min: {costmap.min()}, costmap max: {costmap.max()}")
             self.get_logger().info(f"Costmap shape: {costmap.shape}")
@@ -235,7 +242,7 @@ class LethalHeightCost(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    node = LethalHeightCost('/zedx/zed_node/odom', '/dino_gridmap', '/cherie_costmap')
+    node = LethalHeightCost('/zed/zed_node/odom', '/dino_gridmap', '/cherie_costmap')
     rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()

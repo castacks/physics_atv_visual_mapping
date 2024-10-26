@@ -8,7 +8,7 @@ def generate_launch_description():
     # Declare the argument for the config file
     visual_mapping_config = LaunchConfiguration('visual_mapping_config')
     using_zedros1_bag = False 
-    use_sim = False 
+    use_sim = True 
     # Use PathJoinSubstitution to dynamically join the package path and the config file
     config_fp = PathJoinSubstitution([
         FindPackageShare('physics_atv_visual_mapping'),

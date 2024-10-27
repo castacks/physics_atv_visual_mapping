@@ -10,11 +10,11 @@ def localmap_from_pointcloud(pcl_pos, pcl_data, metadata, reduction='mean'):
     """
     Build a localmap from a pointcloud and corresponding data
     """
-    # Stack pcl_data then height, so we can do height thresholding
-    # Unsqueeze the 1D tensor to match dimensions
-    pcl_pos_z = pcl_pos[:,2].unsqueeze(1)
-    # Concatenate along the last dimension
-    pcl_data = torch.cat((pcl_data, pcl_pos_z), dim=1)
+    # # Stack pcl_data then height, so we can do height thresholding
+    # # Unsqueeze the 1D tensor to match dimensions
+    # pcl_pos_z = pcl_pos[:,2].unsqueeze(1)
+    # # Concatenate along the last dimension
+    # pcl_data = torch.cat((pcl_data, pcl_pos_z), dim=1)
     
     # original code
     ox = metadata['origin'][0].item()

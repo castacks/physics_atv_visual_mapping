@@ -83,7 +83,7 @@ class LethalHeightCost(Node):
                 print("NO MAP")
                 return
             
-            costmap_mode = 'height' # empty, height, features
+            costmap_mode = 'features' # empty, height, features
             if costmap_mode == 'features':
                 avoid_feature = torch.Tensor([22.887554, 21.481354, 22.915676, 19.23652,  23.831785, 21.27125,  19.956055, 22.428432]).cuda()
                 grass_feature = torch.Tensor([23.964779, 21.991943, 23.726662, 19.904432, 22.468143, 21.320164, 20.323324, 23.249199]).cuda()

@@ -81,6 +81,10 @@ image_processing:
             image_insize: [728, 420]
             desc_facet: value
 #            desc_facet: token
+    # - 
+        # type: pca
+        # args:
+        #     fp: /wheelsafe_ws/src/physics_atv_visual_mapping/data/pca/pca_vitb10_value.pt
 
     -
         type: vlad

@@ -1,8 +1,2 @@
-build/
-install/
-launch/log/
-physics_atv_visual_mapping/log/
-test/
-resource/
 */__pycache__/*
 *.pyc

@@ -8,6 +8,7 @@ from physics_atv_visual_mapping.image_processing.processing_blocks.vlad import V
 from physics_atv_visual_mapping.image_processing.processing_blocks.pca_vlad import PCAVLADBlock
 # from physics_atv_visual_mapping.image_processing.processing_blocks.ganav import GANavBlock
 from physics_atv_visual_mapping.image_processing.processing_blocks.featup import FeatUpBlock
+from physics_atv_visual_mapping.image_processing.processing_blocks.naclip import NAClipBlock
 
 from physics_atv_visual_mapping.utils import normalize_dino
 import os 
@@ -33,6 +34,8 @@ def setup_image_pipeline(config):
         #     block = GANavBlock(**block_config['args'])
         elif btype == 'featup':
             block = FeatUpBlock(**block_config['args'])
+        elif btype == 'naclip':
+            block = NAClipBlock(**block_config['args'])
         else:
             print('Unsupported visual block type {}'.format(btype))
             exit(1)

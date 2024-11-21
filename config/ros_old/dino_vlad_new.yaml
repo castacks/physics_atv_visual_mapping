@@ -1,0 +1,120 @@
+image:
+    image_topic: /zedx/zed_node/rgb/image_rect_color
+    camera_info_topic: /zedx/zed_node/rgb/camera_info
+    image_compressed: False
+
+pointcloud:
+    # topic: /velodyne_1/velodyne_points
+    # topic: /full_cloud # velodyne_1
+  #  topic: /coloroze_pcl_node/colorized_pcl
+#   topic: /zedx/zed_node/point_cloud/cloud_registered
+    topic: /pcl_downsampled
+
+odometry:
+    # topic: /integrated_to_init # frame_id: sensor_init
+    topic: /zedx/zed_node/odom
+
+gridmap:
+    topic: local_gridmap
+
+intrinsics:
+    
+    K: [366.83514404296875, 0.0, 492.81915283203125, 0.0, 366.83514404296875, 317.6390075683594, 0.0, 0.0, 1.0]
+    P: [366.83514404296875, 0.0, 492.81915283203125, 0.0, 366.83514404296875, 317.6390075683594, 0.0, 0.0, 1.0]
+
+    # Old
+    # K: [455.7750, 0., 497.1180, 0., 456.3191, 251.8580, 0., 0., 1.]
+    # P: [477.6049499511719, 0.0, 499.5,  0.0, 477.6049499511719, 252.0,  0.0, 0.0, 1.0]
+
+extrinsics:
+#    p: [0.0, 0.0, -0.1274]
+#    q: [-0.549, 0.554, -0.445, -0.440] #xyzw
+
+    # p: [0.0, 0.4, -0.3]
+    # q: [0.569, -0.549, 0.416, 0.450] #xyzw
+
+    #NEW BEST
+    # p: [-0.10772, 0.07414, -0.15637]
+    # q: [0.55860, -0.54800, 0.42820, 0.45200] #xyzw
+
+    # p: [-0.10772, 0.07414, -0.15637]
+    # q: [0.56017, -0.54567, 0.43487, 0.44647] #xyzw
+
+    #NEW from Jeric
+    # p: [0.14397, -0.10793, -0.27834]
+    q: [0.56175, -0.54742, 0.44230, 0.43490] #xyzw
+    
+    p: [0, 0, 0]
+    q: [0.5, -0.5, 0.5, 0.5]
+    # q: [0,0,1,0]
+
+    # p: [0.17265, -0.15227, 0.05708]
+    # q: [0.55940, -0.54718, 0.44603, 0.43442] #xyzw
+    # q: [0.55940, -0.54718, 0.44603, 0.43442] #xyzw
+    # q: [0.55486, -0.55226, 0.44196, 0.43796]
+
+    # p: [0.10883, 0.26500, 0.20678]
+    # q: [-0.55162, 0.43980, -0.43711, 0.55787]
+
+    ######
+
+    # p: [0.03737, -0.16897, 0.10772]
+    # q: [-0.55299, 0.55299, -0.44069, -0.44069] #xyzw
+
+    # p: [-0.10772, 0.07414, -0.15637]
+    # p: [0.03737, -0.16897, 0.10772]
+    # q: [0.57335, -0.53185, 0.44565, 0.43565] #xyzw
+
+
+    # p: [-0.12783448334243963, 0.5477357285163919, -0.24725921859162586]
+    # q: [ 0.570677249100578, -0.5469892401427835, 0.45256768632007355, -0.41268963862194646] #xyzw
+
+    # p: [0.6620720624923706, 1.5378135442733765, 0.2854597866535187]
+    # q: [ -0.5326349584367919, 0.5895693208484806, -0.4481661388405614, 0.40970127461671924] #xyzw
+
+    # p: [-0.24726, 0.12783, -0.54774]
+    # q: [0.44447, -0.53889, 0.42079, 0.57877]
+
+image_processing:
+    -
+        type: dino
+        args:
+            dino_type: dinov2_vitb14
+            dino_layer: 10
+            image_insize: [686, 364] #this should be the size of the input images
+            desc_facet: value
+#            desc_facet: token
+
+    -
+        type: vlad
+        args:
+            n_clusters: 8
+            cache_dir: /home/physics_atv/physics_atv_ws/src/perception/physics_atv_visual_mapping/data/dino_clusters/8_clusters_364x686_
+    # -
+    #     type: vlad
+    #     args:
+    #         n_clusters: 32
+    #         cache_dir: /home/physics_atv/physics_atv_ws/src/perception/physics_atv_visual_mapping/data/dino_clusters/32_clusters686x364_new
+
+localmapping:
+    layer_key: VLAD
+    ema: 0.99 #higher->use recent more
+    metadata:
+        # origin: [-40., -40.]
+        # length_x: 80.
+        # length_y: 80.
+        # resolution: 0.5
+
+       origin: [-20., -20.]
+       length_x: 40.
+       length_y: 40.
+       resolution: 0.1999
+
+       # origin: [-20., -20.]
+       # length_x: 40.
+       # length_y: 40.
+       # resolution: 0.125
+
+device: cuda
+#viz: True
+viz: False

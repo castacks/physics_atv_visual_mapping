@@ -1,0 +1,49 @@
+image:
+    image_topic: /multisense/left/image_rect_color
+    camera_info_topic: /multisense/left/camera_info
+    image_compressed: False
+
+pointcloud:
+    topic: /velodyne_1/velodyne_points
+#    topic: /coloroze_pcl_node/colorized_pcl
+
+odometry:
+    topic: /integrated_to_init
+
+gridmap:
+    topic: local_gridmap
+
+intrinsics:
+    K: [455.7750, 0., 497.1180, 0., 456.3191, 251.8580, 0., 0., 1.]
+
+extrinsics:
+#    p: [0.0, 0.0, -0.1274]
+#    q: [-0.549, 0.554, -0.445, -0.440] #xyzw
+
+    p: [0.0, 0.4, -0.3]
+    q: [0.569, -0.549, 0.416, 0.450] #xyzw
+
+image_processing:
+    - 
+      type: ganav
+      args:
+        seg_config: /home/physics_atv/physics_atv_ws/src/perception/GANav-offroad/ganav_ws/src/ganav/configs/ours/gascola_config.py
+        seg_checkpoint: /home/physics_atv/physics_atv_ws/src/perception/GANav-offroad/ganav_ws/src/ganav/work_dirs/gascola_front.pth
+
+localmapping:
+    layer_key: ganav
+    ema: 0.1 #higher->use recent more
+    metadata:
+        origin: [-60., -60.]
+        length_x: 120.
+        length_y: 120.
+        resolution: 0.5
+
+#        origin: [-20., -20.]
+#        length_x: 40.
+#        length_y: 40.
+#        resolution: 0.1
+
+device: cuda
+#viz: True
+viz: False

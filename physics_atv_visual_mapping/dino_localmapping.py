@@ -37,7 +37,7 @@ from physics_atv_visual_mapping.ros2_numpy_cpp import ros2_numpy_cpp
 
 # approximate maximum per time stamp
 # used for efficient dual buffering
-MAX_N_VOXELS = 500000; # 0.5M
+MAX_N_VOXELS = 500000 # 0.5M
 
 class DinoMappingNode(Node):
     def __init__(self):
@@ -129,7 +129,7 @@ class DinoMappingNode(Node):
         self.pcl_pub = self.create_publisher(PointCloud2, "/dino_pcl", 10)
         self.image_pub = self.create_publisher(Image, "/dino_image", 10)
 
-        self.toggler = 0;
+        self.toggler = 0
         if self.mapper_type == "bev":
             self.gridmap_pub = self.create_publisher(GridMap, "/dino_gridmap", 10)
         else:
@@ -137,31 +137,31 @@ class DinoMappingNode(Node):
             self.voxel_viz_pub = self.create_publisher(
                 PointCloud2, "/dino_voxels_viz", 1
             )
-            self.features_l, self.indices_l = [], [];
-            self.set_dual_buffers(config);            
+            self.features_l, self.indices_l = [], []
+            self.set_dual_buffers(config)            
 
         self.timing_pub = self.create_publisher(Float32, "/dino_proc_time", 10)
 
-        self.timer = self.create_timer(0.2, self.spin)
+        self.timer = self.create_timer(0.1, self.spin)
         self.viz = config["viz"]
 
 
     def set_dual_buffers(self, cfg) :
-        cfg = cfg['localmapping'];
+        cfg = cfg['localmapping']
         if self.mapper_type == "bev" :
-            raise NotImplementedError;
+            raise NotImplementedError
         
         else :
-            n_features = cfg['n_features'];
+            n_features = cfg['n_features']
 
             for _ in range(2) :
                 self.features_l.append(
                     array.array('f', [0] * MAX_N_VOXELS * n_features)
-                );
+                )
 
                 self.indices_l.append(
                     array.array('Q', [0] * MAX_N_VOXELS)
-                );
+                )
 
 
 
@@ -366,8 +366,8 @@ class DinoMappingNode(Node):
         msg.metadata.resolution.y = voxel_grid.metadata.resolution[1].item()
         msg.metadata.resolution.z = voxel_grid.metadata.resolution[2].item()      
 
-        n_voxels = voxel_grid.features.shape[0];
-        n_features = voxel_grid.features.shape[1];
+        n_voxels = voxel_grid.features.shape[0]
+        n_features = voxel_grid.features.shape[1]
 
         msg.num_voxels = n_voxels
         msg.num_features = n_features
@@ -399,9 +399,9 @@ class DinoMappingNode(Node):
         # msg.indices = voxel_grids.indices.tolist()
         # msg.features.data = voxel_grid.features.flatten().tolist()        
        
-        msg.features.data = self.features_l[self.toggler];
-        msg.indices = self.indices_l[self.toggler];
-        self.toggler = (self.toggler + 1) % 2;
+        msg.features.data = self.features_l[self.toggler]
+        msg.indices = self.indices_l[self.toggler]
+        self.toggler = (self.toggler + 1) % 2
 
         ros2_numpy_cpp.npcpp_voxel_grid(
             np.ascontiguousarray(voxel_grid.features.data.cpu().numpy()),
@@ -410,7 +410,7 @@ class DinoMappingNode(Node):
             msg.indices.buffer_info()[0],
             msg.num_voxels,
             msg.num_features,
-        );
+        )
 
         return msg    
 
@@ -745,12 +745,15 @@ class DinoMappingNode(Node):
 
             after_update_time = time.time()
             voxel_msg = self.make_voxel_msg(self.localmapper.voxel_grid)
-            after_msg_creation_time = time.time();
+            voxel_msg.features.data = voxel_msg.features.data[:voxel_msg.num_voxels*voxel_msg.num_features]
+            voxel_msg.indices = voxel_msg.indices[:voxel_msg.num_voxels]
+            self.get_logger().info(str(len(self.features_l[self.toggler])))
+            after_msg_creation_time = time.time()
             self.get_logger().info(
                 "msg creation time: {}".format(after_msg_creation_time - after_update_time)
             )            
             self.voxel_pub.publish(voxel_msg)
-            after_publish_time = time.time();            
+            after_publish_time = time.time()            
 
             pcl_msg = self.make_pcl_msg(res["dino_pcl"], vmin=vmin, vmax=vmax)
             self.pcl_pub.publish(pcl_msg)

@@ -71,26 +71,26 @@ image_processing:
     #         fp: physics_atv_visual_mapping/pca/sam_renegade_ridge.pt
 
 # # voxel
-# localmapping:
-#     mapper_type: voxel
-#     layer_key: radio
-#     ema: 0.5 #higher->use recent more
-#     n_features: 16
-#     metadata:
-#         origin: [-60., -60., -30.]
-#         length: [120., 120., 60.]
-#         resolution: [0.25, 0.25, 0.25]
-
-#BEV
 localmapping:
-    mapper_type: bev
-    layer_key: dino
-    ema: 0.1 #higher->use recent more
+    mapper_type: voxel
+    layer_key: radio
+    ema: 0.5 #higher->use recent more
     n_features: 16
     metadata:
-        origin: [-40., -40.]
-        length: [80., 80.]
-        resolution: [0.25, 0.25]
+        origin: [-60., -60., -30.]
+        length: [120., 120., 60.]
+        resolution: [0.25, 0.25, 0.25]
+
+#BEV
+# localmapping:
+#     mapper_type: bev
+#     layer_key: dino
+#     ema: 0.1 #higher->use recent more
+#     n_features: 16
+#     metadata:
+#         origin: [-40., -40.]
+#         length: [80., 80.]
+#         resolution: [0.25, 0.25]
 
 device: cuda
 #viz: True

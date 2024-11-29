@@ -153,8 +153,8 @@ def main(args=None):
     rclpy.init(args=args)
 
     #test params
-    N_VOXELS = 500000 #empirically, ~1.5mil voxels is an upper bound of what we see in practice
-    N_FEATURES = 16
+    N_VOXELS = 1500000 #empirically, ~1.5mil voxels is an upper bound of what we see in practice
+    N_FEATURES = 3
     DEVICE = 'cuda'
 
     metadata = LocalMapperMetadata(

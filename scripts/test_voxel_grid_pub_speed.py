@@ -75,6 +75,7 @@ class PubTestNode(Node):
 
         t2 = self.get_clock().now()
 
+        self.get_logger().info("proc {} ({} floats)".format(pcdata_npy.shape, np.prod(pcdata_npy.shape)))
         pcdata = pcdata_npy.astype("f").tobytes()
 
         t3 = self.get_clock().now()

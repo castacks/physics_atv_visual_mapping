@@ -44,6 +44,8 @@ class DinoMappingNode(Node):
     def __init__(self):
         super().__init__("visual_mapping")
 
+        self.get_logger().info("FAST VOXEL MAPPING")
+
         self.declare_parameter("config_fp", "")
         self.declare_parameter("models_dir", "")
 
@@ -128,7 +130,7 @@ class DinoMappingNode(Node):
         self.pcl_pub = self.create_publisher(PointCloud2, "/dino_pcl", 10)
         self.image_pub = self.create_publisher(Image, "/dino_image", 10)
 
-        self.toggler = 0;
+        self.toggler = 0
         if self.mapper_type == "bev":
             self.gridmap_pub = self.create_publisher(GridMap, "/dino_gridmap", 10)
         else:
@@ -146,21 +148,21 @@ class DinoMappingNode(Node):
 
 
     def set_dual_buffers(self, cfg) :
-        cfg = cfg['localmapping'];
+        cfg = cfg['localmapping']
         if self.mapper_type == "bev" :
-            raise NotImplementedError;
+            raise NotImplementedError
         
         else :
-            n_features = cfg['n_features'];
+            n_features = cfg['n_features']
 
             for _ in range(2) :
                 self.features_l.append(
                     array.array('f', [0] * MAX_N_VOXELS * n_features)
-                );
+                )
 
                 self.indices_l.append(
                     array.array('Q', [0] * MAX_N_VOXELS)
-                );
+                )
 
 
 
@@ -398,9 +400,9 @@ class DinoMappingNode(Node):
         # msg.indices = voxel_grids.indices.tolist()
         # msg.features.data = voxel_grid.features.flatten().tolist()        
        
-        msg.features.data = self.features_l[self.toggler];
-        msg.indices = self.indices_l[self.toggler];
-        self.toggler = (self.toggler + 1) % 2;
+        msg.features.data = self.features_l[self.toggler]
+        msg.indices = self.indices_l[self.toggler]
+        self.toggler = (self.toggler + 1) % 2
 
         ros2_numpy_cpp.npcpp_voxel_grid(
             np.ascontiguousarray(voxel_grid.features.data.cpu().numpy()),

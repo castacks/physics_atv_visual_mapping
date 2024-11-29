@@ -172,4 +172,5 @@ class BEVGrid:
         self.device = device
         self.data = self.data.to(device)
         self.known = self.known.to(device)
+        self.metadata = self.metadata.to(device)
         return self

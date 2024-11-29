@@ -1,6 +1,5 @@
 import rclpy
 from rclpy.node import Node
-from rclpy.serialization import serialize_message, deserialize_message
 import yaml
 import copy
 import array
@@ -43,6 +42,8 @@ MAX_N_VOXELS = 500000; # 0.5M
 class DinoMappingNode(Node):
     def __init__(self):
         super().__init__("visual_mapping")
+
+        self.get_logger().info("ORIGINAL VOXEL MAPPING")
 
         self.declare_parameter("config_fp", "")
         self.declare_parameter("models_dir", "")

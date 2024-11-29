@@ -236,4 +236,5 @@ class VoxelGrid:
         self.device = device
         self.indices = self.indices.to(device)
         self.features = self.features.to(device)
+        self.metadata = self.metadata.to(device)
         return self

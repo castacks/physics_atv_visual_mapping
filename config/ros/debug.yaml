@@ -74,10 +74,10 @@ localmapping:
     mapper_type: voxel
     layer_key: radio
     ema: 0.5 #higher->use recent more
-    n_features: 16
+    n_features: 64
     metadata:
-        origin: [-60., -60., -30.]
-        length: [120., 120., 60.]
+        origin: [-100., -100., -50.]
+        length: [200., 200., 100.]
         resolution: [0.25, 0.25, 0.25]
 
 # #BEV

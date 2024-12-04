@@ -14,15 +14,17 @@ class NAClipBlock(ImageProcessingBlock):
 
     def run(self, image, intrinsics, image_orig):
 
-        image_features = self.naclip_model.encode_image(image, return_all=True)
+        image_features = self.naclip_model.encode_image(image, return_all=True).detach()
         image_features = image_features[:, 1:]
         image_features /= image_features.norm(dim=-1, keepdim=True)
         img_out = image_features
 
+        print("Image shape", image.shape)
+        print("Image out shape", img_out.shape)
         ix = image.shape[3]
-        dx = img_out.shape[3]
+        dx = img_out.shape[2]
         iy = image.shape[2]
-        dy = img_out.shape[2]
+        dy = img_out.shape[1]
 
         intrinsics[:, 0, 0] *= (dx/ix)
         intrinsics[:, 0, 2] *= (dx/ix)

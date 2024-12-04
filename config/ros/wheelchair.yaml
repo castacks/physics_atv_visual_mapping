@@ -72,30 +72,34 @@ extrinsics:
     # q: [0.44447, -0.53889, 0.42079, 0.57877]
 
 image_processing:
-    -
-        type: dino
-        args:
-            dino_type: dinov2_vitb14
-            dino_layer: 10
-            # image_insize: [686, 364] #this should be the size of the input images
-            image_insize: [728, 420]
-            desc_facet: value
-#            desc_facet: token
-    # - 
-        # type: pca
-        # args:
-        #     fp: /wheelsafe_ws/src/physics_atv_visual_mapping/data/pca/pca_vitb10_value.pt
+#     -
+#         type: dino
+#         args:
+#             dino_type: dinov2_vitb14
+#             dino_layer: 10
+#             # image_insize: [686, 364] #this should be the size of the input images
+#             image_insize: [728, 420]
+#             desc_facet: value
+# #            desc_facet: token
+#     # - 
+#         # type: pca
+#         # args:
+#         #     fp: /wheelsafe_ws/src/physics_atv_visual_mapping/data/pca/pca_vitb10_value.pt
 
+#     -
+#         type: vlad
+#         args:
+#             n_clusters: 8
+#             cache_dir: /wheelsafe_ws/src/physics_atv_visual_mapping/data/dino_clusters/8_wheelchair # TODO: parametrize parent folder path
+#     # -
+#     #     type: vlad
+#     #     args:
+#     #         n_clusters: 32
+#     #         cache_dir: /home/physics_atv/physics_atv_ws/src/perception/physics_atv_visual_mapping/data/dino_clusters/32_clusters686x364_new
     -
-        type: vlad
+        type: naclip
         args:
-            n_clusters: 8
-            cache_dir: /wheelsafe_ws/src/physics_atv_visual_mapping/data/dino_clusters/8_wheelchair # TODO: parametrize parent folder path
-    # -
-    #     type: vlad
-    #     args:
-    #         n_clusters: 32
-    #         cache_dir: /home/physics_atv/physics_atv_ws/src/perception/physics_atv_visual_mapping/data/dino_clusters/32_clusters686x364_new
+            image_insize: [728, 420]
 
 localmapping:
     layer_key: VLAD

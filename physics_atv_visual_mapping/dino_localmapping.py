@@ -85,10 +85,10 @@ class DinoMappingNode(Node):
         self.pcl_msg.header.frame_id = 'base_link'
 
     def handle_odom(self, msg):
+        self.odom_msg = msg
         self.odom_msg.child_frame_id = 'base_link' # TODO: parametrize
         if self.odom_frame is None:
             self.odom_frame = msg.header.frame_id
-        self.odom_msg = msg
 
     def handle_img(self, msg):
         self.img_msg = msg
@@ -145,9 +145,13 @@ class DinoMappingNode(Node):
         img = torch.tensor(img).unsqueeze(0).permute(0, 3, 1, 2)
 
         dino_img, dino_intrinsics = self.image_pipeline.run(img, self.intrinsics.unsqueeze(0))
+        self.get_logger().info("img.shape {}".format(img.shape))
+        self.get_logger().info("dino_img.shape {}".format(dino_img.shape))
+        self.get_logger().info("dino_intrinsics.shape {}".format(dino_intrinsics.shape))
         # dino_img = img.to(self.device)
         # dino_intrinsics = self.intrinsics.unsqueeze(0).to(self.device)
-        dino_img = dino_img[0].permute(1, 2, 0)
+        dino_img = dino_img.permute(1, 2, 0)
+        # self.get_logger().info("after permute dino_img.shape {}".format(dino_img.shape))
         dino_intrinsics = dino_intrinsics[0]
 
         I = get_intrinsics(dino_intrinsics).to(self.device)
@@ -303,6 +307,8 @@ class DinoMappingNode(Node):
 
         #TODO: figure out how to support multiple viz output types
         gridmap_rgb = gridmap_data[..., :3]
+        self.get_logger().info("gridmap_data.shape {}".format(gridmap_data.shape))
+        self.get_logger().info("gridmap_rgb.shape {}".format(gridmap_rgb.shape))
         vmin = gridmap_rgb.reshape(-1, 3).min(axis=0).reshape(1,1,3)
         vmax = gridmap_rgb.reshape(-1, 3).max(axis=0).reshape(1,1,3)
         gridmap_cs = ((gridmap_rgb-vmin)/(vmax-vmin)).clip(0., 1.)

@@ -150,6 +150,7 @@ class DinoMappingNode(Node):
         self.get_logger().info("dino_intrinsics.shape {}".format(dino_intrinsics.shape))
         # dino_img = img.to(self.device)
         # dino_intrinsics = self.intrinsics.unsqueeze(0).to(self.device)
+        dino_img = dino_img.squeeze(0)
         dino_img = dino_img.permute(1, 2, 0)
         # self.get_logger().info("after permute dino_img.shape {}".format(dino_img.shape))
         dino_intrinsics = dino_intrinsics[0]
@@ -168,6 +169,12 @@ class DinoMappingNode(Node):
 
         dino_features = dino_img[pixels_in_frame[:, 1], pixels_in_frame[:, 0]]
         dino_pcl = torch.cat([pcl_odom[ind_in_frame][:, :3], dino_features], dim=-1)
+        # self.get_logger().info("dino_img.shape {}".format(dino_img.shape))
+        # self.get_logger().info("pixels_in_frame".format(pixels_in_frame))
+        # self.get_logger().info("dino_features.shape {}".format(dino_features.shape))
+        # self.get_logger().info("ind_in_frame {}".format(ind_in_frame))
+        # self.get_logger().info("pcl_odom.shape {}".format(pcl_odom.shape))
+        # self.get_logger().info("dino_pcl.shape {}".format(dino_pcl.shape))
         
         return {
             'pcl': pcl_odom,

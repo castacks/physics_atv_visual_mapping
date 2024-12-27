@@ -58,7 +58,11 @@ class ImagePipeline:
         intrinsics_out = intrinsics.clone()
 
         for block in self.blocks:
+            # print('running block:', block)
+            # print('image_feats:', image_feats.shape)
+            # print('intrinsics_out:', intrinsics_out.shape)
             image_feats, intrinsics_out = block.run(image_feats, intrinsics_out, image)
+            # print('image_feats_out:', image_feats.shape)
 
         return image_feats, intrinsics_out
 

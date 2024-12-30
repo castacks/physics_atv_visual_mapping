@@ -6,7 +6,7 @@ from physics_atv_visual_mapping.localmapping.metadata import LocalMapperMetadata
 
 from physics_atv_visual_mapping.terrain_estimation.processing_blocks.elevation_stats import ElevationStats
 from physics_atv_visual_mapping.terrain_estimation.processing_blocks.elevation_filter import ElevationFilter
-from physics_atv_visual_mapping.terrain_estimation.processing_blocks.sdf import SDF
+# from physics_atv_visual_mapping.terrain_estimation.processing_blocks.sdf import SDF
 from physics_atv_visual_mapping.terrain_estimation.processing_blocks.terrain_inflation import TerrainInflation
 from physics_atv_visual_mapping.terrain_estimation.processing_blocks.mrf_terrain_estimation import MRFTerrainEstimation
 from physics_atv_visual_mapping.terrain_estimation.processing_blocks.slope import Slope
@@ -31,8 +31,8 @@ def setup_terrain_estimation_pipeline(config):
             block = ElevationStats(**block_config["args"])
         elif btype == "elevation_filter":
             block = ElevationFilter(**block_config["args"])
-        elif btype == "sdf":
-            block = SDF(**block_config["args"])
+        # elif btype == "sdf":
+        #     block = SDF(**block_config["args"])
         elif btype == "terrain_inflation":
             block = TerrainInflation(**block_config["args"])
         elif btype == "mrf_terrain_estimation":

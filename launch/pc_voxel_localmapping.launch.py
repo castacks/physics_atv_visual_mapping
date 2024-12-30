@@ -43,7 +43,6 @@ def generate_launch_description():
             parameters=[
                 {"config_fp": config_fp},
                 {"use_sim_time": LaunchConfiguration("use_sim_time")},
-                {"models_dir": LaunchConfiguration("models_dir")},
             ],
         ),
     ]

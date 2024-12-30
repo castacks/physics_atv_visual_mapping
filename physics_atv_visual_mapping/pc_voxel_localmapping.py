@@ -3,6 +3,8 @@ from rclpy.node import Node
 import yaml
 import copy
 import numpy as np
+import time 
+import cv2
 
 np.float = np.float64  # hack for numpify
 
@@ -15,12 +17,12 @@ from std_msgs.msg import Float32, Float32MultiArray, MultiArrayDimension
 from sensor_msgs.msg import PointCloud2, Image, CompressedImage
 from nav_msgs.msg import Odometry
 from grid_map_msgs.msg import GridMap
-from perception_interfaces.msg import FeatureVoxelGrid
+# from perception_interfaces.msg import FeatureVoxelGrid
 
 # from physics_atv_visual_mapping.image_processing.image_pipeline import (
 #     setup_image_pipeline,
 # )
-from physics_atv_visual_mapping.pointcloud_colorization.torch_color_pcl_utils import *
+# from physics_atv_visual_mapping.pointcloud_colorization.torch_color_pcl_utils import *
 from physics_atv_visual_mapping.terrain_estimation.terrain_estimation_pipeline import setup_terrain_estimation_pipeline
 
 from physics_atv_visual_mapping.localmapping.bev.bev_localmapper import BEVLocalMapper
@@ -37,19 +39,9 @@ class PCVoxelMappingNode(Node):
         super().__init__("visual_mapping")
 
         self.declare_parameter("config_fp", "")
-        self.declare_parameter("models_dir", "")
-
-        self.get_logger().info(
-            "Looking for models in {}".format(
-                self.get_parameter("models_dir").get_parameter_value().string_value
-            )
-        )
 
         config_fp = self.get_parameter("config_fp").get_parameter_value().string_value
         config = yaml.safe_load(open(config_fp, "r"))
-        config["models_dir"] = (
-            self.get_parameter("models_dir").get_parameter_value().string_value
-        )
 
         self.vehicle_frame = config["vehicle_frame"]
 
@@ -193,54 +185,54 @@ class PCVoxelMappingNode(Node):
             "pcl": pcl_in_odom,
         }
 
-    def make_voxel_msg(self, voxel_grid):
-        msg = FeatureVoxelGrid()
-        msg.header.stamp = self.pcl_msg.header.stamp
-        msg.header.frame_id = self.odom_frame
+    # def make_voxel_msg(self, voxel_grid):
+    #     msg = FeatureVoxelGrid()
+    #     msg.header.stamp = self.pcl_msg.header.stamp
+    #     msg.header.frame_id = self.odom_frame
 
-        msg.metadata.origin.x = voxel_grid.metadata.origin[0].item()
-        msg.metadata.origin.y = voxel_grid.metadata.origin[1].item()
-        msg.metadata.origin.z = voxel_grid.metadata.origin[2].item()
+    #     msg.metadata.origin.x = voxel_grid.metadata.origin[0].item()
+    #     msg.metadata.origin.y = voxel_grid.metadata.origin[1].item()
+    #     msg.metadata.origin.z = voxel_grid.metadata.origin[2].item()
 
-        msg.metadata.length.x = voxel_grid.metadata.length[0].item()
-        msg.metadata.length.y = voxel_grid.metadata.length[1].item()
-        msg.metadata.length.z = voxel_grid.metadata.length[2].item()
+    #     msg.metadata.length.x = voxel_grid.metadata.length[0].item()
+    #     msg.metadata.length.y = voxel_grid.metadata.length[1].item()
+    #     msg.metadata.length.z = voxel_grid.metadata.length[2].item()
 
-        msg.metadata.resolution.x = voxel_grid.metadata.resolution[0].item()
-        msg.metadata.resolution.y = voxel_grid.metadata.resolution[1].item()
-        msg.metadata.resolution.z = voxel_grid.metadata.resolution[2].item()
+    #     msg.metadata.resolution.x = voxel_grid.metadata.resolution[0].item()
+    #     msg.metadata.resolution.y = voxel_grid.metadata.resolution[1].item()
+    #     msg.metadata.resolution.z = voxel_grid.metadata.resolution[2].item()
 
-        msg.num_voxels = voxel_grid.features.shape[0]
-        msg.num_features = voxel_grid.features.shape[1]
+    #     msg.num_voxels = voxel_grid.features.shape[0]
+    #     msg.num_features = voxel_grid.features.shape[1]
 
-        if self.layer_keys is None:
-            msg.feature_keys = [
-                "{}_{}".format(self.layer_key, i) for i in range(voxel_grid.features.shape[1])
-            ]
-        else:
-            msg.feature_keys = copy.deepcopy(self.layer_keys)
+    #     if self.layer_keys is None:
+    #         msg.feature_keys = [
+    #             "{}_{}".format(self.layer_key, i) for i in range(voxel_grid.features.shape[1])
+    #         ]
+    #     else:
+    #         msg.feature_keys = copy.deepcopy(self.layer_keys)
 
-        msg.indices = voxel_grid.indices.tolist()
+    #     msg.indices = voxel_grid.indices.tolist()
 
-        feature_msg = Float32MultiArray()
-        feature_msg.layout.dim.append(
-            MultiArrayDimension(
-                label="column_index",
-                size=voxel_grid.features.shape[0],
-                stride=voxel_grid.features.shape[0],
-            )
-        )
-        feature_msg.layout.dim.append(
-            MultiArrayDimension(
-                label="row_index",
-                size=voxel_grid.features.shape[0],
-                stride=voxel_grid.features.shape[0] * voxel_grid.features.shape[1],
-            )
-        )
+    #     feature_msg = Float32MultiArray()
+    #     feature_msg.layout.dim.append(
+    #         MultiArrayDimension(
+    #             label="column_index",
+    #             size=voxel_grid.features.shape[0],
+    #             stride=voxel_grid.features.shape[0],
+    #         )
+    #     )
+    #     feature_msg.layout.dim.append(
+    #         MultiArrayDimension(
+    #             label="row_index",
+    #             size=voxel_grid.features.shape[0],
+    #             stride=voxel_grid.features.shape[0] * voxel_grid.features.shape[1],
+    #         )
+    #     )
 
-        feature_msg.data = voxel_grid.features.flatten().tolist()
+    #     feature_msg.data = voxel_grid.features.flatten().tolist()
 
-        return msg
+    #     return msg
 
     def make_gridmap_msg(self, bev_grid):
         """

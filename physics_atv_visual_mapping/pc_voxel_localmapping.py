@@ -87,12 +87,13 @@ class PCVoxelMappingNode(Node):
             PointCloud2, "/voxels_viz", 1
         )
 
-        if self.do_terrain_estimation:
-            self.gridmap_pub = self.create_publisher(GridMap, "/dino_gridmap", 10)
+        # if self.do_terrain_estimation:
+        #     self.gridmap_pub = self.create_publisher(GridMap, "/dino_gridmap", 10)
 
+        self.costmap_pub = self.create_publisher(GridMap, '/local_navmap', 10)
         self.timing_pub = self.create_publisher(Float32, "/dino_proc_time", 10)
 
-        self.timer = self.create_timer(0.2, self.spin)
+        self.timer = self.create_timer(0.1, self.spin)
         self.viz = config["viz"]
 
         # for debug
@@ -234,113 +235,48 @@ class PCVoxelMappingNode(Node):
 
     #     return msg
 
-    def make_gridmap_msg(self, bev_grid):
+    def map_data_to_gridmap(self, msg, data, layers=["costmap"]):
         """
-        convert dino into gridmap msg
+        convert costmap into gridmap msg
 
-        Publish all the feature channels, plus a visualization and elevation layer
-
-        Note that we assume all the requisite stuff is available (pcl, img, odom) as this
-        should only be called after a dino map is successfully produced
+        Args:
+            msg: The input msg to extract metadata from
+            data: List of Tensors ([WxH]) to convert to gridmap
+            layers: List of strings corresponding to data
         """
-        gridmap_msg = GridMap()
+        msg_out = GridMap()
+        msg_out.header = msg.header
+        msg_out.layers = layers
 
-        gridmap_data = bev_grid.data.cpu().numpy()
-        np.save(str(self.tempind).zfill(6) + '.npy',gridmap_data)
-        self.tempind += 1
-
-        # setup metadata
-        gridmap_msg.header.stamp = self.pcl_msg.header.stamp #self.img_msg.header.stamp # TODO: Wenshan
-        gridmap_msg.header.frame_id = self.odom_frame
-
-        gridmap_msg.layers = bev_grid.feature_keys
-
-        #temp hack
-        gridmap_msg.basic_layers = ["min_elevation_filtered_inflated_mask"]
-        mask_idx = gridmap_msg.layers.index("min_elevation_filtered_inflated_mask")
-        mask = gridmap_data[..., mask_idx] > 0.1
-        gridmap_data[..., mask_idx][~mask] = float('nan')
-
-        gridmap_msg.info.resolution = self.localmapper.metadata.resolution[0].item()
-        gridmap_msg.info.length_x = self.localmapper.metadata.length[0].item()
-        gridmap_msg.info.length_y = self.localmapper.metadata.length[1].item()
-        gridmap_msg.info.pose.position.x = (
-            self.localmapper.metadata.origin[0].item() + 0.5 * gridmap_msg.info.length_x
+        msg_out.info.resolution = self.bev_grid.metadata.resolution.mean().item()
+        msg_out.info.length_x = self.bev_grid.metadata.length[0].item()
+        msg_out.info.length_y = self.bev_grid.metadata.length[1].item()
+        msg_out.info.pose.position.x = (
+            self.bev_grid.metadata.origin[0].item() + 0.5 * msg_out.info.length_x
         )
-        gridmap_msg.info.pose.position.y = (
-            self.localmapper.metadata.origin[1].item() + 0.5 * gridmap_msg.info.length_y
+        msg_out.info.pose.position.y = (
+            self.bev_grid.metadata.origin[1].item() + 0.5 * msg_out.info.length_y
         )
-        gridmap_msg.info.pose.position.z = self.odom_msg.pose.pose.position.z
-        gridmap_msg.info.pose.orientation.w = 1.0
-        # transposed_layer_data = np.transpose(gridmap_data, (0, 2,1))
-        # flipped_layer_data = np.flip(np.flip(transposed_layer_data, axis=1), axis=2)
+        msg_out.info.pose.position.z = 0.
+        msg_out.info.pose.orientation.w = 1.0
 
-        # gridmap_data has the shape (rows, cols, layers)
-        # Step 1: Flip the 2D grid layers in both directions (reverse both axes)
-        flipped_data = np.flip(gridmap_data, axis=(0, 1))  # Flips along both axes
-
-        # Step 2: Transpose the first two dimensions (x, y) for each layer
-        transposed_data = np.transpose(
-            flipped_data, axes=(1, 0, 2)
-        )  # Transpose rows and cols
-
-        # Step 3: Flatten each 2D layer, maintaining the layers' structure (flattening across x, y)
-        flattened_data = transposed_data.reshape(-1, gridmap_data.shape[-1])
-        accum_time = 0
-        for i in range(gridmap_data.shape[-1]):
-            layer_data = gridmap_data[..., i]
-            gridmap_layer_msg = Float32MultiArray()
-            gridmap_layer_msg.layout.dim.append(
-                MultiArrayDimension(
-                    label="column_index",
-                    size=layer_data.shape[0],
-                    stride=layer_data.shape[0],
-                )
-            )
-            gridmap_layer_msg.layout.dim.append(
-                MultiArrayDimension(
-                    label="row_index",
-                    size=layer_data.shape[0],
-                    stride=layer_data.shape[0] * layer_data.shape[1],
-                )
-            )
-
-            # gridmap reverses the rasterization
-            start_time = time.time()
-            gridmap_layer_msg.data = flattened_data[:, i].tolist()
-            end_time = time.time()
-            accum_time += end_time - start_time
-
-            # gridmap_layer_msg.data = flipped_layer_data[i].flatten().tolist()
-            gridmap_msg.data.append(gridmap_layer_msg)
-        self.get_logger().info("time to flatten layer {}: {}".format(i, accum_time))
-        # add dummy elevation
-        gridmap_msg.layers.append("elevation")
-        layer_data = (
-            np.zeros_like(gridmap_data[..., 0])
-            + self.odom_msg.pose.pose.position.z
-            - 1.73
-        )
-        gridmap_layer_msg = Float32MultiArray()
-        gridmap_layer_msg.layout.dim.append(
+        layer_msg = Float32MultiArray()
+        layer_msg.layout.dim.append(
             MultiArrayDimension(
-                label="column_index",
-                size=layer_data.shape[0],
-                stride=layer_data.shape[0],
+                label="column_index", size=data.shape[0], stride=data.shape[0]
             )
         )
-        gridmap_layer_msg.layout.dim.append(
+        layer_msg.layout.dim.append(
             MultiArrayDimension(
                 label="row_index",
-                size=layer_data.shape[0],
-                stride=layer_data.shape[0] * layer_data.shape[1],
+                size=data.shape[0],
+                stride=data.shape[0] * data.shape[1],
             )
         )
 
-        gridmap_layer_msg.data = layer_data.flatten().tolist()
-        gridmap_msg.data.append(gridmap_layer_msg)
-
-        return gridmap_msg
+        layer_msg.data = data[::-1, ::-1].T.flatten().tolist()
+        msg_out.data.append(layer_msg)
+        return msg_out
 
     def make_pcl_msg(self, pcl):
         """
@@ -438,34 +374,42 @@ class PCVoxelMappingNode(Node):
         img_msg.header.stamp = self.img_msg.header.stamp
         return img_msg
 
-    def simple_costmap(self, bev_grid, pos):
+    def simple_costmap(self, bev_grid, pos, vismap = False):
         # 'min_elevation', 'mean_elevation', 'max_elevation', 'num_voxels', 
         # 'min_elevation_filtered', 'min_elevation_filtered_mask', 'min_elevation_filtered_inflated', 'min_elevation_filtered_inflated_mask', 
         # 'diff'
         data = bev_grid.data.cpu().numpy()
 
         num_voxels = data[:,:,3]
-        mask1 = num_voxels > 0
+        # mask1 = num_voxels > 0
         mask2 = data[:,:,7] > 0
 
         robot_height = pos[2] - 1.8 # hard code
         data[:,:,:3] -= robot_height
         data[:,:,4] -= robot_height
-        data[:,:,6] -= robot_height
+        data[:,:,6] -= robot_height # min_elevation_filtered_inflated
 
-        costmap = np.zeros_like(num_voxels, dtype=np.uint8)
-        costmap[~mask2] = 128
+        costmap = np.zeros_like(num_voxels, dtype=np.float32)
+        costmap[~mask2] = 1.0# unknown
         obstacle = data[:,:, 6] > 1.0
         obstacle[~mask2] = False
-        costmap[obstacle] = 255
+        costmap[obstacle] = 2.0
 
         rough = data[:,:, 8] > 0.5
         rough[~mask2] = False
-        costmap[rough] = 180
+        costmap[rough] = 2.0
 
-        vis = cv2.applyColorMap(costmap, cv2.COLORMAP_JET)
-        cv2.imshow('img',vis)
-        cv2.waitKey(1)
+        veryrough = data[:,:, 8] > 1.0
+        veryrough[~mask2] = False
+        costmap[veryrough] = 5.0
+
+        if vismap:
+            vis = (costmap * 50).astype(np.uint8)
+            vis = cv2.applyColorMap(vis, cv2.COLORMAP_JET)
+            cv2.imshow('img',vis)
+            cv2.waitKey(1)
+
+        return costmap
 
     def vis_gridmap(self, bev_grid, pos):
         # 'min_elevation', 'mean_elevation', 'max_elevation', 'num_voxels', 
@@ -598,7 +542,11 @@ class PCVoxelMappingNode(Node):
             after_update_time = time.time()
             # self.publish_messages(res)
             # self.vis_gridmap(self.bev_grid, res['pos'].cpu().numpy())
-            self.simple_costmap(self.bev_grid, res['pos'].cpu().numpy())
+            costmap = self.simple_costmap(self.bev_grid, res['pos'].cpu().numpy())
+            costmap_msg = self.map_data_to_gridmap(self.pcl_msg, costmap)
+            
+            self.costmap_pub.publish(costmap_msg)
+
             after_publish_time = time.time()
 
             self.get_logger().info(

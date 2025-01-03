@@ -3,7 +3,7 @@ from matplotlib import pyplot as plt
 import matplotlib.patches as patches
 
 # Variables
-gridmap_path = '/wheelsafe_ws/gridmap_data.npy'
+gridmap_path = '/ros_ws/gridmap_data.npy'
 
 # Load gridmap
 gridmap_npy = np.load(gridmap_path) # [8, 64, 64]

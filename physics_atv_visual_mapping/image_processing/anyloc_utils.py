@@ -56,7 +56,7 @@ class DinoV2ExtractFeatures:
         # #torch.hub.set_dir(dino_dir)
         self.dino_model: nn.Module = torch.hub.load(
                 #    dino_dir + '/facebookresearch_dinov2_main',dino_model,source='local')
-               '/wheelsafe_ws/facebookresearch_dinov2_main', dino_model,source='local')
+               '/ros_ws/facebookresearch_dinov2_main', dino_model,source='local')
 
         self.device = torch.device(device)
         self.dino_model.blocks = nn.Sequential(*list(self.dino_model.blocks.children())[:-1])

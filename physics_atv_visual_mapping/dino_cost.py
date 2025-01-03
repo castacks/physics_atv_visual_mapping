@@ -85,11 +85,13 @@ class LethalHeightCost(Node):
             
             costmap_mode = 'features' # empty, height, features
             if costmap_mode == 'features':
-                avoid_feature = torch.Tensor([22.887554, 21.481354, 22.915676, 19.23652,  23.831785, 21.27125,  19.956055, 22.428432]).cuda()
-                grass_feature = torch.Tensor([23.964779, 21.991943, 23.726662, 19.904432, 22.468143, 21.320164, 20.323324, 23.249199]).cuda()
+                # avoid_feature = torch.Tensor([22.887554, 21.481354, 22.915676, 19.23652,  23.831785, 21.27125,  19.956055, 22.428432]).cuda()
+                avoid_feature = torch.Tensor([25.197876, 21.696243, 24.205647, 24.736038, 22.71544,  24.884506, 20.79713, 24.430073]).cuda() # radio, grass
+                # grass_feature = torch.Tensor([23.964779, 21.991943, 23.726662, 19.904432, 22.468143, 21.320164, 20.323324, 23.249199]).cuda()
+                grass_feature = torch.Tensor([25.197876, 21.696243, 24.205647, 24.736038, 22.71544,  24.884506, 20.79713, 24.430073]).cuda() # radio
                 # sidewalk_feature = torch.Tensor([23.582233, 22.66328,  16.452255, 22.246119, 24.866558, 21.518925, 22.776405, 20.603878]).cuda() # grey sidewalk
-                sidewalk_feature = torch.Tensor([[23.802433, 22.701805, 18.775259, 22.595041, 23.969284, 21.344238, 21.642178, 20.242914]]).cuda() # sand colored sidewalk
-
+                # sidewalk_feature = torch.Tensor([[23.802433, 22.701805, 18.775259, 22.595041, 23.969284, 21.344238, 21.642178, 20.242914]]).cuda() # sand colored sidewalk
+                sidewalk_feature = torch.Tensor([25.016464, 21.799082, 18.736214, 22.177929, 23.700327, 20.390478, 22.705978, 22.43816 ]).cuda() # radio
                 gridmap_features = torch.Tensor(gridmap['data'][:8, ...]).cuda()
                 avoid_similarity_map = self.pixelwise_euclidean_distance(gridmap_features, avoid_feature).cpu().numpy()
                 grass_sim_map = self.pixelwise_euclidean_distance(gridmap_features, grass_feature).cpu().numpy()
@@ -242,7 +244,7 @@ class LethalHeightCost(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    node = LethalHeightCost('/zed/zed_node/odom', '/dino_gridmap', '/cherie_costmap')
+    node = LethalHeightCost('/zed/map_frame_odom', '/dino_gridmap', '/cherie_costmap')
     rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()

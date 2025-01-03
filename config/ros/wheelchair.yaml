@@ -1,22 +1,22 @@
 image:
-    image_topic: /zed/zed_node/rgb/image_rect_color
-    camera_info_topic: /zed/zed_node/rgb/camera_info
+    image_topic: /zed/microstrain_inertial_driver/rgb/image_rect_color
+    camera_info_topic: /zed/microstrain_inertial_driver/rgb/camera_info
     image_compressed: False
 
 pointcloud:
-    topic: /zed/zed_node/point_cloud/cloud_registered
+    topic: /zed/microstrain_inertial_driver/downsampled_cloud
 
 odometry:
-    topic: /zed/zed_node/odom
+    topic: /zed/map_frame_odom
 
 gridmap:
     topic: local_gridmap
 
 intrinsics:
 
-    K: [366.83514404296875, 0.0, 492.81915283203125, 0.0, 366.83514404296875, 317.6390075683594, 0.0, 0.0, 1.0]
+    K: [366.8225402832031, 0.0, 492.81884765625, 0.0, 366.8225402832031, 317.63922119140625, 0.0, 0.0, 1.0]
     # P: [366.83514404296875, 0.0, 492.81915283203125, 0.0, 366.83514404296875, 317.6390075683594, 0.0, 0.0, 1.0]
-    P: [146.71441650390625, 0.0, 197.1288604736328, 0.0, 146.71441650390625, 127.05476379394531, 0.0,  0.0, 1.0]
+    P: [366.8225402832031, 0.0, 492.81884765625, 0.0, 366.8225402832031, 317.63922119140625, 0.0,  0.0, 1.0]
 
     # Old
     # K: [455.7750, 0., 497.1180, 0., 456.3191, 251.8580, 0., 0., 1.]
@@ -72,30 +72,41 @@ extrinsics:
     # q: [0.44447, -0.53889, 0.42079, 0.57877]
 
 image_processing:
-    -
-        type: dino
-        args:
-            dino_type: dinov2_vitb14
-            dino_layer: 10
-            # image_insize: [686, 364] #this should be the size of the input images
-            image_insize: [728, 420]
-            desc_facet: value
-#            desc_facet: token
-    # - 
-        # type: pca
-        # args:
-        #     fp: /wheelsafe_ws/src/physics_atv_visual_mapping/data/pca/pca_vitb10_value.pt
+#     -
+#         type: dino
+#         args:
+#             dino_type: dinov2_vitb14
+#             dino_layer: 10
+#             # image_insize: [686, 364] #this should be the size of the input images
+#             image_insize: [728, 420]
+#             desc_facet: value
+# #            desc_facet: token
+#     # - 
+#         # type: pca
+#         # args:
+#         #     fp: /wheelsafe_ws/src/physics_atv_visual_mapping/data/pca/pca_vitb10_value.pt
 
-    -
-        type: vlad
-        args:
-            n_clusters: 8
-            cache_dir: /wheelsafe_ws/src/physics_atv_visual_mapping/data/dino_clusters/8_wheelchair # TODO: parametrize parent folder path
+#     -
+#         type: vlad
+#         args:
+#             n_clusters: 8
+#             cache_dir: /ros_ws/src/autonomy/2_perception/physics_atv_visual_mapping/data/dino_clusters/8_wheelchair # TODO: parametrize parent folder path
     # -
     #     type: vlad
     #     args:
     #         n_clusters: 32
     #         cache_dir: /home/physics_atv/physics_atv_ws/src/perception/physics_atv_visual_mapping/data/dino_clusters/32_clusters686x364_new
+    -
+        type: radio
+        args:
+            radio_type: radio_v2.5-b # radio_v2 e-radio_v2
+            image_insize: [352, 352]  # Original Image Size must be divisible by 16
+    -
+        type: vlad
+        args:
+            n_clusters: 8
+            cache_dir: /ros_ws/src/autonomy/2_perception/physics_atv_visual_mapping/data/dino_clusters/8_wheelchair_radio
+
 
 localmapping:
     layer_key: VLAD

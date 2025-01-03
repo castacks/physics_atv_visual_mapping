@@ -82,13 +82,13 @@ class DinoMappingNode(Node):
     def handle_pointcloud(self, msg):
         self.pcl_msg = msg
         # self.pcl_msg.header.frame_id = 'zed_camera_link' # TODO: parametrize
-        self.pcl_msg.header.frame_id = 'base_link'
+        self.pcl_msg.header.frame_id = 'zed_left_camera_frame'
 
     def handle_odom(self, msg):
-        self.odom_msg.child_frame_id = 'base_link' # TODO: parametrize
+        self.odom_msg = msg
+        self.odom_msg.child_frame_id = 'zed_left_camera_frame' # TODO: parametrize
         if self.odom_frame is None:
             self.odom_frame = msg.header.frame_id
-        self.odom_msg = msg
 
     def handle_img(self, msg):
         self.img_msg = msg
@@ -144,26 +144,44 @@ class DinoMappingNode(Node):
 
         img = torch.tensor(img).unsqueeze(0).permute(0, 3, 1, 2)
 
+        # Get time 
+        torch.cuda.synchronize()
+        start_time = time.time()
         dino_img, dino_intrinsics = self.image_pipeline.run(img, self.intrinsics.unsqueeze(0))
+        torch.cuda.synchronize()
+        self.get_logger().info('size of img: {}, time to process image: {}'.format(img.shape, time.time()-start_time))
         # dino_img = img.to(self.device)
         # dino_intrinsics = self.intrinsics.unsqueeze(0).to(self.device)
         dino_img = dino_img[0].permute(1, 2, 0)
         dino_intrinsics = dino_intrinsics[0]
 
+        torch.cuda.synchronize()
+        start_time = time.time()
         I = get_intrinsics(dino_intrinsics).to(self.device)
         E = get_extrinsics(self.extrinsics).to(self.device)
         P = obtain_projection_matrix(I, E)
-
+        
         pixel_coordinates = get_pixel_from_3D_source(pcl[:, :3], P)
+        torch.cuda.synchronize()
+        self.get_logger().info('time to project pcl: {} PCL shape: {}, Pixel shape: {}'.format(time.time()-start_time, pcl.shape, pixel_coordinates.shape))
+
+        torch.cuda.synchronize()
+        start_time = time.time()
         lidar_points_in_frame, pixels_in_frame, ind_in_frame = get_points_and_pixels_in_frame(
             pcl[:, :3],
             pixel_coordinates,
             dino_img.shape[0],
             dino_img.shape[1]
         )
+        torch.cuda.synchronize()
+        self.get_logger().info('time to get points and pixels in frame: {}'.format(time.time()-start_time))
 
+        torch.cuda.synchronize()
+        start_time = time.time()
         dino_features = dino_img[pixels_in_frame[:, 1], pixels_in_frame[:, 0]]
         dino_pcl = torch.cat([pcl_odom[ind_in_frame][:, :3], dino_features], dim=-1)
+        torch.cuda.synchronize()
+        self.get_logger().info('time to get features: {}'.format(time.time()-start_time))
         
         return {
             'pcl': pcl_odom,

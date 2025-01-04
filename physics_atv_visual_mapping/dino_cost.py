@@ -161,7 +161,7 @@ class LethalHeightCost(Node):
         
         # Apply cost based on the highest similarity to features
         # Areas similar to avoid get the highest cost
-        costmap += avoid_norm * high_cost
+        # costmap += avoid_norm * high_cost
 
         # Areas similar to grass get medium cost
         costmap += grass_norm * medium_cost

@@ -14,6 +14,7 @@ from rosbag_to_dataset.dtypes.gridmap import GridMapConvert
 import matplotlib
 import torch
 import torch.nn.functional as F
+import cv2 
 
 CMAP = matplotlib.cm.get_cmap('magma')
 
@@ -35,6 +36,10 @@ class LethalHeightCost(Node):
         self.cost = 0.0
         self.channels = []
         self.grid_map_cvt = GridMapConvert(channels=self.channels, size=[1, 1])
+        
+        # TODO: parametrize
+        self.residual_max = 22.5 # from GP_wheelchair.yaml
+        self.uc_thresh = .9 # from GP_wheelchair.yaml
 
         print('DONE WITH INIT')
 
@@ -83,7 +88,7 @@ class LethalHeightCost(Node):
                 print("NO MAP")
                 return
             
-            costmap_mode = 'features' # empty, height, features
+            costmap_mode = 'features' # empty, height, features, anomaly
             if costmap_mode == 'features':
                 # avoid_feature = torch.Tensor([22.887554, 21.481354, 22.915676, 19.23652,  23.831785, 21.27125,  19.956055, 22.428432]).cuda()
                 avoid_feature = torch.Tensor([25.197876, 21.696243, 24.205647, 24.736038, 22.71544,  24.884506, 20.79713, 24.430073]).cuda() # radio, grass
@@ -107,6 +112,15 @@ class LethalHeightCost(Node):
             elif costmap_mode == 'height':
                 height_thresh = 0
                 costmap = (gridmap['data'][8] > height_thresh).astype(float) # TODO: ideallly later can query by keys
+            elif costmap_mode == 'anomaly':
+                unc_map = gridmap['data'].min(axis=0)
+                unc_map /= self.residual_max
+                unc_map[unc_map < self.uc_thresh] = 0
+                e_kernel = np.ones((2, 2), np.float32)
+                unc_map = cv2.erode(unc_map, e_kernel, iterations=1)
+                unc_map = cv2.dilate(unc_map, e_kernel, iterations=1)
+                costmap = unc_map
+                
             else:
                 raise NotImplementedError('costmap mode not yet implemented')
                 

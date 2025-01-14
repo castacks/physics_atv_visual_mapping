@@ -6,7 +6,7 @@ image:
     image_compressed: False
 
 pointcloud:
-   topic: /superodometry/velodyne_cloud_registered
+   topic: /superodometry/ouster_cloud
 
 odometry:
     topic: /superodometry/integrated_to_init
@@ -77,7 +77,7 @@ terrain_estimation:
             mask_layer: min_elevation_filtered_mask
 
             kernel_params:
-                kernel_radius: 5. #kernel radius in m
+                kernel_radius: 3. #kernel radius in m
                 kernel_type: gaussian #one of {gaussian/box} the kernel type to use for inflation
                 kernel_sharpness: 10. #sharpness of (Gaussian) kernel
 

@@ -1,4 +1,4 @@
-models_dir: /home/tartandriver/tartandriver_ws/models #necessary to include this for non-ROS offline proc
+# models_dir: /home/tartandriver/tartandriver_ws/models #necessary to include this for non-ROS offline proc
 
 image:
     image_topic: /multisense/left/image_rect_color
@@ -6,10 +6,10 @@ image:
     image_compressed: False
 
 pointcloud:
-   topic: /superodometry/ouster_cloud
+   topic: /slam/ouster_cloud
 
 odometry:
-    topic: /superodometry/integrated_to_init
+    topic: /slam/integrated_to_init
 
 gridmap:
     topic: local_gridmap

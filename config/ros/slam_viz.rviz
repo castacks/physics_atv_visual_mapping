@@ -1,0 +1,498 @@
+Panels:
+  - Class: rviz_common/Displays
+    Help Height: 138
+    Name: Displays
+    Property Tree Widget:
+      Expanded:
+        - /Global Options1
+        - /Status1
+        - /Sensors1
+        - /SLAM1
+        - /Mapping1
+        - /Traversability1
+        - /Traversability1/Speedmap1/Topic1
+        - /Planning/Control1
+      Splitter Ratio: 0.5
+    Tree Height: 770
+  - Class: rviz_common/Selection
+    Name: Selection
+  - Class: rviz_common/Tool Properties
+    Expanded:
+      - /2D Goal Pose1
+      - /Publish Point1
+    Name: Tool Properties
+    Splitter Ratio: 0.5886790156364441
+  - Class: rviz_common/Views
+    Expanded:
+      - /Current View1
+    Name: Views
+    Splitter Ratio: 0.5
+  - Class: rviz_common/Time
+    Experimental: false
+    Name: Time
+    SyncMode: 0
+    SyncSource: ""
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Alpha: 0.5
+      Cell Size: 1
+      Class: rviz_default_plugins/Grid
+      Color: 160; 160; 164
+      Enabled: true
+      Line Style:
+        Line Width: 0.029999999329447746
+        Value: Lines
+      Name: Grid
+      Normal Cell Count: 0
+      Offset:
+        X: 0
+        Y: 0
+        Z: 0
+      Plane: XY
+      Plane Cell Count: 10
+      Reference Frame: <Fixed Frame>
+      Value: true
+    - Class: rviz_common/Group
+      Displays:
+        - Alpha: 0.5
+          Autocompute Intensity Bounds: true
+          Autocompute Value Bounds:
+            Max Value: 10
+            Min Value: -10
+            Value: true
+          Axis: Z
+          Channel Name: intensity
+          Class: rviz_default_plugins/PointCloud2
+          Color: 255; 255; 255
+          Color Transformer: FlatColor
+          Decay Time: 0
+          Enabled: true
+          Invert Rainbow: false
+          Max Color: 255; 255; 255
+          Max Intensity: 192
+          Min Color: 0; 0; 0
+          Min Intensity: 0
+          Name: Velodyne 1
+          Position Transformer: XYZ
+          Selectable: true
+          Size (Pixels): 3
+          Size (m): 0.05000000074505806
+          Style: Flat Squares
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /velodyne_1/velodyne_points
+          Use Fixed Frame: true
+          Use rainbow: true
+          Value: true
+        - Class: rviz_default_plugins/Image
+          Enabled: true
+          Max Value: 1
+          Median window: 5
+          Min Value: 0
+          Name: Image
+          Normalize Range: true
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /multisense/left/image_rect_color
+          Value: true
+      Enabled: true
+      Name: Sensors
+    - Class: rviz_common/Group
+      Displays:
+        - Angle Tolerance: 0.10000000149011612
+          Class: rviz_default_plugins/Odometry
+          Covariance:
+            Orientation:
+              Alpha: 0.5
+              Color: 255; 255; 127
+              Color Style: Unique
+              Frame: Local
+              Offset: 1
+              Scale: 1
+              Value: true
+            Position:
+              Alpha: 0.30000001192092896
+              Color: 204; 51; 204
+              Scale: 1
+              Value: true
+            Value: true
+          Enabled: true
+          Keep: 1
+          Name: Super Odometry
+          Position Tolerance: 0.10000000149011612
+          Shape:
+            Alpha: 1
+            Axes Length: 1
+            Axes Radius: 0.10000000149011612
+            Color: 255; 25; 0
+            Head Length: 0.30000001192092896
+            Head Radius: 0.10000000149011612
+            Shaft Length: 1
+            Shaft Radius: 0.05000000074505806
+            Value: Axes
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /integrated_to_init
+          Value: true
+        - Alpha: 1
+          Autocompute Intensity Bounds: true
+          Autocompute Value Bounds:
+            Max Value: 10.862248420715332
+            Min Value: -9.326148986816406
+            Value: true
+          Axis: Z
+          Channel Name: intensity
+          Class: rviz_default_plugins/PointCloud2
+          Color: 255; 255; 255
+          Color Transformer: AxisColor
+          Decay Time: 5
+          Enabled: true
+          Invert Rainbow: false
+          Max Color: 255; 255; 255
+          Max Intensity: 4096
+          Min Color: 0; 0; 0
+          Min Intensity: 0
+          Name: Pointcloud in Odom
+          Position Transformer: XYZ
+          Selectable: true
+          Size (Pixels): 3
+          Size (m): 0.019999999552965164
+          Style: Flat Squares
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /superodometry/velodyne_cloud_registered
+          Use Fixed Frame: true
+          Use rainbow: true
+          Value: true
+      Enabled: true
+      Name: SLAM
+    - Class: rviz_common/Group
+      Displays:
+        - Alpha: 0.5
+          Autocompute Intensity Bounds: true
+          Class: grid_map_rviz_plugin/GridMap
+          Color: 200; 200; 200
+          Color Layer: rgb_viz
+          Color Transformer: ColorLayer
+          Enabled: false
+          Height Layer: terrain
+          Height Transformer: GridMapLayer
+          History Length: 1
+          Invert Rainbow: false
+          Max Color: 255; 255; 255
+          Max Intensity: 10
+          Min Color: 0; 0; 0
+          Min Intensity: 0
+          Name: BEV Map
+          Show Grid Lines: false
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /local_gridmap
+          Use Rainbow: true
+          Value: false
+        - Alpha: 0.5
+          Autocompute Intensity Bounds: true
+          Class: grid_map_rviz_plugin/GridMap
+          Color: 200; 200; 200
+          Color Layer: terrain
+          Color Transformer: IntensityLayer
+          Enabled: true
+          Height Layer: terrain
+          Height Transformer: GridMapLayer
+          History Length: 1
+          Invert Rainbow: false
+          Max Color: 255; 255; 255
+          Max Intensity: 10
+          Min Color: 0; 0; 0
+          Min Intensity: 0
+          Name: Feature BEV
+          Show Grid Lines: false
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /dino_gridmap
+          Use Rainbow: true
+          Value: true
+        - Class: rviz_default_plugins/Image
+          Enabled: true
+          Max Value: 1
+          Median window: 5
+          Min Value: 0
+          Name: Feature Image
+          Normalize Range: true
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /feature_image
+          Value: true
+        - Alpha: 1
+          Autocompute Intensity Bounds: true
+          Autocompute Value Bounds:
+            Max Value: 10
+            Min Value: -10
+            Value: true
+          Axis: Z
+          Channel Name: intensity
+          Class: rviz_default_plugins/PointCloud2
+          Color: 255; 255; 255
+          Color Transformer: RGB8
+          Decay Time: 5
+          Enabled: true
+          Invert Rainbow: false
+          Max Color: 255; 255; 255
+          Max Intensity: 151
+          Min Color: 0; 0; 0
+          Min Intensity: 0
+          Name: Feature PointCloud
+          Position Transformer: XYZ
+          Selectable: true
+          Size (Pixels): 3
+          Size (m): 0.05000000074505806
+          Style: Flat Squares
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /feature_pointcloud
+          Use Fixed Frame: true
+          Use rainbow: true
+          Value: true
+        - Alpha: 1
+          Autocompute Intensity Bounds: true
+          Autocompute Value Bounds:
+            Max Value: 10
+            Min Value: -10
+            Value: true
+          Axis: Z
+          Channel Name: intensity
+          Class: rviz_default_plugins/PointCloud2
+          Color: 255; 255; 255
+          Color Transformer: RGB8
+          Decay Time: 0
+          Enabled: false
+          Invert Rainbow: false
+          Max Color: 255; 255; 255
+          Max Intensity: 4096
+          Min Color: 0; 0; 0
+          Min Intensity: 0
+          Name: Feature Voxels
+          Position Transformer: XYZ
+          Selectable: true
+          Size (Pixels): 3
+          Size (m): 0.20000000298023224
+          Style: Boxes
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /dino_voxels_viz
+          Use Fixed Frame: true
+          Use rainbow: true
+          Value: false
+      Enabled: false
+      Name: Mapping
+    - Class: rviz_common/Group
+      Displays:
+        - Alpha: 0.5
+          Autocompute Intensity Bounds: false
+          Class: grid_map_rviz_plugin/GridMap
+          Color: 200; 200; 200
+          Color Layer: costmap
+          Color Transformer: IntensityLayer
+          Enabled: true
+          Height Layer: costmap
+          Height Transformer: Flat
+          History Length: 1
+          Invert Rainbow: false
+          Max Color: 255; 255; 255
+          Max Intensity: 4
+          Min Color: 0; 0; 0
+          Min Intensity: 0
+          Name: Costmap
+          Show Grid Lines: false
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /local_navmap
+          Use Rainbow: true
+          Value: true
+        - Alpha: 0.5
+          Autocompute Intensity Bounds: false
+          Class: grid_map_rviz_plugin/GridMap
+          Color: 200; 200; 200
+          Color Layer: speedmap
+          Color Transformer: IntensityLayer
+          Enabled: false
+          Height Layer: speedmap
+          Height Transformer: Flat
+          History Length: 1
+          Invert Rainbow: false
+          Max Color: 255; 255; 255
+          Max Intensity: 10
+          Min Color: 0; 0; 0
+          Min Intensity: 0
+          Name: Speedmap
+          Show Grid Lines: false
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /local_navmap
+          Use Rainbow: true
+          Value: false
+      Enabled: true
+      Name: Traversability
+    - Class: rviz_common/Group
+      Displays:
+        - Alpha: 1
+          Arrow Length: 0.30000001192092896
+          Axes Length: 2
+          Axes Radius: 2
+          Class: rviz_default_plugins/PoseArray
+          Color: 255; 25; 0
+          Enabled: true
+          Head Length: 0.07000000029802322
+          Head Radius: 0.029999999329447746
+          Name: Goal Points
+          Shaft Length: 0.23000000417232513
+          Shaft Radius: 0.009999999776482582
+          Shape: Axes
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /next_waypoints/odom
+          Value: true
+        - Class: rviz_default_plugins/MarkerArray
+          Enabled: true
+          Name: MPPI
+          Namespaces:
+            {}
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /mppi/viz
+          Value: true
+      Enabled: true
+      Name: Planning/Control
+  Enabled: true
+  Global Options:
+    Background Color: 48; 48; 48
+    Fixed Frame: sensor
+    Frame Rate: 30
+  Name: root
+  Tools:
+    - Class: rviz_default_plugins/Interact
+      Hide Inactive Objects: true
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+    - Class: rviz_default_plugins/FocusCamera
+    - Class: rviz_default_plugins/Measure
+      Line color: 128; 128; 0
+    - Class: rviz_default_plugins/SetInitialPose
+      Covariance x: 0.25
+      Covariance y: 0.25
+      Covariance yaw: 0.06853891909122467
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /initialpose
+    - Class: rviz_default_plugins/SetGoal
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /goal_pose
+    - Class: rviz_default_plugins/PublishPoint
+      Single click: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /clicked_point
+  Transformation:
+    Current:
+      Class: rviz_default_plugins/TF
+  Value: true
+  Views:
+    Current:
+      Angle: 0
+      Class: rviz_default_plugins/TopDownOrtho
+      Enable Stereo Rendering:
+        Stereo Eye Separation: 0.05999999865889549
+        Stereo Focal Distance: 1
+        Swap Stereo Eyes: false
+        Value: false
+      Invert Z Axis: false
+      Name: Current View
+      Near Clip Distance: 0.009999999776482582
+      Scale: 29.503189086914062
+      Target Frame: vehicle
+      Value: TopDownOrtho (rviz_default_plugins)
+      X: 0
+      Y: 0
+    Saved: ~
+Window Geometry:
+  Displays:
+    collapsed: false
+  Feature Image:
+    collapsed: false
+  Height: 1934
+  Hide Left Dock: false
+  Hide Right Dock: false
+  Image:
+    collapsed: false
+  QMainWindow State: 000000ff00000000fd0000000400000000000002100000068cfc020000000afb0000001200530065006c0065006300740069006f006e00000001e10000009b000000b000fffffffb0000001e0054006f006f006c002000500072006f007000650072007400690065007302000001ed000001df00000185000000a3fb000000120056006900650077007300200054006f006f02000001df000002110000018500000122fb000000200054006f006f006c002000500072006f0070006500720074006900650073003203000002880000011d000002210000017afb0000002000730065006c0065006300740069006f006e00200062007500660066006500720200000138000000aa0000023a00000294fb00000014005700690064006500530074006500720065006f02000000e6000000d2000003ee0000030bfb0000000c004b0069006e0065006300740200000186000001060000030c00000261fb000000100044006900730070006c006100790073010000006e000003fa0000018200fffffffb0000000a0049006d0061006700650100000474000002860000004a00fffffffb0000001a004600650061007400750072006500200049006d00610067006500000002d8000000dc0000004a00ffffff000000010000015f0000068cfc0200000003fb0000001e0054006f006f006c002000500072006f00700065007200740069006500730100000041000000780000000000000000fb0000000a00560069006500770073010000006e0000068c0000013200fffffffb0000001200530065006c0065006300740069006f006e010000025a000000b200000000000000000000000200000490000000a9fc0100000001fb0000000a00560069006500770073030000004e00000080000002e1000001970000000300000c730000005afc0100000002fb0000000800540069006d0065010000000000000c730000058100fffffffb0000000800540069006d00650100000000000004500000000000000000000008ec0000068c00000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
+  Selection:
+    collapsed: false
+  Time:
+    collapsed: false
+  Tool Properties:
+    collapsed: false
+  Views:
+    collapsed: false
+  Width: 3187
+  X: 70
+  Y: 27

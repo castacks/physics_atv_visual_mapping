@@ -6,7 +6,7 @@ image:
     image_compressed: False
 
 pointcloud:
-   topic: /slam/ouster_cloud
+   topic: /slam/registered_scan
 
 odometry:
     topic: /slam/integrated_to_init
@@ -15,7 +15,7 @@ gridmap:
     topic: local_gridmap
 
 #the base link of the vehicle (e.g. base_link, vehicle, etc.)
-vehicle_frame: vehicle 
+vehicle_frame: sensor 
 
 # #camera intrinsics
 # intrinsics:
@@ -47,9 +47,9 @@ localmapping:
     ema: 0.5 #higher->use recent more
     n_features: 16
     metadata:
-        origin: [-30., -30., -15.]
-        length: [60., 60., 30.]
-        resolution: [0.2, 0.2, 0.2]
+        origin: [-10., -10., -1.5]
+        length: [20., 20., 3.]
+        resolution: [0.1, 0.1, 0.1]
 
 terrain_estimation:
     -
@@ -66,7 +66,7 @@ terrain_estimation:
             height_high_thresh: 0.5 #cells this far above their neighbors are not terrain
 
             kernel_params:
-                kernel_radius: 2. #kernel radius in m
+                kernel_radius: 1. #kernel radius in m
                 kernel_type: gaussian #one of {gaussian/box} the kernel type to use for inflation
                 kernel_sharpness: 5. #sharpness of (Gaussian) kernel
 
@@ -77,7 +77,7 @@ terrain_estimation:
             mask_layer: min_elevation_filtered_mask
 
             kernel_params:
-                kernel_radius: 3. #kernel radius in m
+                kernel_radius: 1. #kernel radius in m
                 kernel_type: gaussian #one of {gaussian/box} the kernel type to use for inflation
                 kernel_sharpness: 10. #sharpness of (Gaussian) kernel
 

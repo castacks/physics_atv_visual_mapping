@@ -1,4 +1,5 @@
-models_dir: /home/tartandriver/tartandriver_ws/models #necessary to include this for non-ROS offline proc
+# models_dir: /phoenix/perception_models #necessary to include this for non-ROS offline proc
+models_dir: /home/tartandriver/tartandriver_ws/models
 
 image:
     image_topic: /multisense/left/image_rect_color
@@ -6,11 +7,10 @@ image:
     image_compressed: False
 
 pointcloud:
-    topic: /velodyne_cloud_registered_with_features
-#    topic: /coloroze_pcl_node/colorized_pcl
+   topic: /velodyne_1/velodyne_points
 
 odometry:
-    topic: /integrated_to_init
+    topic: /superodometry/integrated_to_init
 
 gridmap:
     topic: local_gridmap
@@ -20,20 +20,20 @@ vehicle_frame: vehicle
 
 #camera intrinsics
 intrinsics:
-    K: [455.7750, 0., 497.1180, 0., 456.3191, 251.8580, 0., 0., 1.]
-    P: [455.7750, 0., 497.1180, 0., 456.3191, 251.8580, 0., 0., 1.]
+    K: [1064.3520, 0., 732.8348, 0., 1064.3520, 581.5662, 0., 0., 1]
+    P: [1064.3520, 0., 732.8348, 0., 1064.3520, 581.5662, 0., 0., 1]
 
 #transform from the vehicle link to the camera link
 extrinsics:
-    p: [0.0, 0.4, -0.3]
-    q: [0.569, -0.549, 0.416, 0.450] #xyzw
+    p: [0.353, 1.025, -0.627]
+    q: [-0.509, 0.512, -0.492, -0.485] #xyzw
 
 image_processing:
     -
         type: radio
         args:
             radio_type: radio_v2.5-b # radio_v2 e-radio_v2
-            image_insize: [672, 352]  # Original Image Size must be divisible by 16
+            image_insize: [672, 496]  # Original Image Size must be divisible by 16
 
     - 
         type: pca
@@ -43,13 +43,13 @@ image_processing:
 # voxel
 localmapping:
     mapper_type: voxel
-    layer_key: radio
+    layer_key: dino
     ema: 0.5 #higher->use recent more
-    n_features: 64
+    n_features: 16
     metadata:
-        origin: [-60., -60., -30.]
-        length: [120., 120., 60.]
-        resolution: [0.25, 0.25, 0.25]
+        origin: [-30., -30., -15.]
+        length: [60., 60., 30.]
+        resolution: [0.2, 0.2, 0.2]
 
 terrain_estimation:
     -
@@ -66,9 +66,10 @@ terrain_estimation:
             height_high_thresh: 0.5 #cells this far above their neighbors are not terrain
 
             kernel_params:
-                kernel_radius: 2. #kernel radius in m
                 kernel_type: gaussian #one of {gaussian/box} the kernel type to use for inflation
-                kernel_sharpness: 5. #sharpness of (Gaussian) kernel
+
+                kernel_radius: 0.25 #kernel radius in m
+                kernel_sharpness: 0.5 #sharpness of (Gaussian) kernel
 
     -
         type: terrain_inflation
@@ -77,9 +78,10 @@ terrain_estimation:
             mask_layer: min_elevation_filtered_mask
 
             kernel_params:
-                kernel_radius: 5. #kernel radius in m
                 kernel_type: gaussian #one of {gaussian/box} the kernel type to use for inflation
-                kernel_sharpness: 10. #sharpness of (Gaussian) kernel
+
+                kernel_radius: 0.5 #kernel radius in m
+                kernel_sharpness: 1.0 #sharpness of (Gaussian) kernel
 
     - 
         type: mrf_terrain_estimation
@@ -87,15 +89,16 @@ terrain_estimation:
             input_layer: min_elevation_filtered_inflated
             mask_layer: min_elevation_filtered_inflated_mask
 
-            itrs: 20   #num updates
-            alpha: 10. #weight on the measurement update
+            itrs: 1   #num updates
+            alpha: 5. #weight on the measurement update
             beta: 10.  #weight on the neighbor update
             lr: 0.05   #learning rate
 
             kernel_params:
-                kernel_radius: 5. #kernel radius in m
                 kernel_type: gaussian #one of {gaussian/box} the kernel type to use for inflation
-                kernel_sharpness: 10. #sharpness of (Gaussian) kernel
+
+                kernel_radius: 0.5
+                kernel_sharpness: 1.0
 
     - 
         type: slope
@@ -109,13 +112,14 @@ terrain_estimation:
             terrain_layer: terrain
             max_elevation_layer: max_elevation
             max_elevation_mask_layer: num_voxels
+            overhang: 1.0
     -
         type: terrain_aware_bev_feature_splat
         args:
-            output_key: terrain_bev
+            output_key: dino
             terrain_layer: terrain
             terrain_mask_layer: min_elevation_filtered_inflated_mask
-            overhang: 2.0
+            overhang: 1.0
 
 device: cuda
 viz: False

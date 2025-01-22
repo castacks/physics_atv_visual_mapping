@@ -1,5 +1,5 @@
-# models_dir: /phoenix/perception_models #necessary to include this for non-ROS offline proc
-models_dir: /home/tartandriver/tartandriver_ws/models
+models_dir: /phoenix/perception_models #necessary to include this for non-ROS offline proc
+# models_dir: /home/tartandriver/tartandriver_ws/models
 
 image:
     image_topic: /multisense/left/image_rect_color

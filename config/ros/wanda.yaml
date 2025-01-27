@@ -1,4 +1,4 @@
-models_dir: /phoenix/perception_models #necessary to include this for non-ROS offline proc
+models_dir: /phoenix/cmu_sara_perception_models #necessary to include this for non-ROS offline proc
 # models_dir: /home/tartandriver/tartandriver_ws/models
 
 image:

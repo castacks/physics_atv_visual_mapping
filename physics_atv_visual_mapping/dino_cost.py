@@ -18,7 +18,7 @@ import torch.nn.functional as F
 CMAP = matplotlib.cm.get_cmap('magma')
 
 class LethalHeightCost(Node):
-    def __init__(self, odom_topic, gridmap_topic, costmap_topic):
+    def __init__(self, odom_topic, gridmap_topic, costmap_topic, clip_text_feats_topic='/clip_text_feats'):
         super().__init__('lethal_height_cost')
 
         self._lock = Lock()
@@ -27,6 +27,7 @@ class LethalHeightCost(Node):
 
         self.gridmap_sub = self.create_subscription(GridMap, gridmap_topic, self.handle_map, 1)
         self.odom_sub = self.create_subscription(Odometry, odom_topic, self.handle_odom, 1)
+        self.clip_text_feats_sub = self.create_subscription(Float32MultiArray, clip_text_feats_topic, self.handle_clip_text_feats, 1)
 
         self.timer = self.create_timer(0.1, self.run_map)
         self.costmap_pub = self.create_publisher(GridMap, costmap_topic, 2)
@@ -35,6 +36,8 @@ class LethalHeightCost(Node):
         self.cost = 0.0
         self.channels = []
         self.grid_map_cvt = GridMapConvert(channels=self.channels, size=[1, 1])
+        
+        self.clip_text_feats = None
 
         print('DONE WITH INIT')
 
@@ -54,6 +57,16 @@ class LethalHeightCost(Node):
                     if 'VLAD' in layer:
                         self.channels.append(layer)
                 self.grid_map_cvt.channels = self.channels
+
+    def handle_clip_text_feats(self, msg):
+        clip_text_feats = np.array(msg.data).reshape((msg.layout.dim[0].size, msg.layout.dim[1].size))
+        self.get_logger().info(f"clip_text_feats: {clip_text_feats}")
+        self.clip_text_feats = {
+            'obstacle': clip_text_feats[0],
+            'grass': clip_text_feats[1],
+            'sidewalk': clip_text_feats[2]
+        }
+        self.get_logger().info(f"clip_text_feats: {self.clip_text_feats}")
 
     def run_map(self):
         now = time.perf_counter()
@@ -83,7 +96,7 @@ class LethalHeightCost(Node):
                 print("NO MAP")
                 return
             
-            costmap_mode = 'features' # empty, height, features
+            costmap_mode = 'clip' # empty, height, features, clip
             if costmap_mode == 'features':
                 avoid_feature = torch.Tensor([22.887554, 21.481354, 22.915676, 19.23652,  23.831785, 21.27125,  19.956055, 22.428432]).cuda()
                 grass_feature = torch.Tensor([23.964779, 21.991943, 23.726662, 19.904432, 22.468143, 21.320164, 20.323324, 23.249199]).cuda()
@@ -105,6 +118,18 @@ class LethalHeightCost(Node):
             elif costmap_mode == 'height':
                 height_thresh = 0
                 costmap = (gridmap['data'][8] > height_thresh).astype(float) # TODO: ideallly later can query by keys
+            elif costmap_mode == 'clip':
+                self.get_logger().info(f"RUN MAP clip_text_feats: {self.clip_text_feats}")
+                avoid_feature = torch.from_numpy(self.clip_text_feats['obstacle']).cuda()
+                grass_feature = torch.from_numpy(self.clip_text_feats['grass']).cuda()
+                sidewalk_feature = torch.from_numpy(self.clip_text_feats['sidewalk']).cuda()
+
+                gridmap_features = torch.Tensor(gridmap['data']).cuda()
+                avoid_similarity_map = self.pixelwise_cosine_distance(gridmap_features, avoid_feature).cpu().numpy()
+                grass_sim_map = self.pixelwise_cosine_distance(gridmap_features, grass_feature).cpu().numpy()
+                sidewalk_sim_map = self.pixelwise_cosine_distance(gridmap_features, sidewalk_feature).cpu().numpy()
+                
+                costmap = self.create_costmap(avoid_similarity_map, grass_sim_map, sidewalk_sim_map)
             else:
                 raise NotImplementedError('costmap mode not yet implemented')
                 
@@ -194,6 +219,48 @@ class LethalHeightCost(Node):
         distance_map = torch.norm(diff, p=2, dim=-1)  # Shape: (H, W)
         
         return distance_map
+    
+    def pixelwise_cosine_distance(self, image_feature_map, text_features):
+        """
+        Calculate pixelwise cosine similarity between each pixel's feature vector and a target vector.
+        
+        Args:
+            input_data (torch.Tensor or np.ndarray): Input data of shape (C, H, W), where C is the number of feature channels.
+            target_vector (torch.Tensor or np.ndarray): A target vector of shape (C,) to calculate similarity against.
+        
+        Returns:
+            similarity_map (torch.Tensor or np.ndarray): Cosine similarity map of shape (H, W), where each value represents 
+                                                    the cosine similarity between the corresponding pixel and the target vector.
+        """
+        # If input_data is a NumPy array, convert it to a torch.Tensor
+        if isinstance(image_feature_map, np.ndarray):
+            image_feature_map = torch.from_numpy(image_feature_map)
+        if isinstance(text_features, np.ndarray):
+            text_features = torch.from_numpy(text_features)
+        
+        # Compute the dot product between each pixel vector and the target vector
+        C, H, W = image_feature_map.shape
+        T = text_features.shape[0]
+        
+        self.get_logger().info(f"image_feature_map shape: {image_feature_map.shape}")
+        self.get_logger().info(f"text_features shape: {text_features.shape}")
+
+    
+        text_features /= text_features.norm(dim = -1, keepdim = True)
+        # text_features = text_features.reshape(1, T, 1)
+
+        image_feature_map = image_feature_map.permute(1, 2, 0)
+        image_feature_map = image_feature_map.reshape(H*W, C)
+
+        image_feature_map /= image_feature_map.norm(dim = 1, keepdim = True)
+        
+
+        cos_sim_map = text_features @ image_feature_map.T
+        cos_sim_map = cos_sim_map.reshape(H, W, 1).permute(2, 0, 1)
+        
+        cos_distance_map = 1 - cos_sim_map
+        
+        return cos_distance_map[0]
 
 
     def costmap_to_gridmap(self, costmap, info, header, costmap_layer='costmap'):

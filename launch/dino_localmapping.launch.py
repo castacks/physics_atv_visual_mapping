@@ -40,12 +40,12 @@ def generate_launch_description():
             parameters=[{'config_fp': config_fp}, 
                         {'use_sim_time': LaunchConfiguration('use_sim_time')}],
         ),
-        Node(
-            package='physics_atv_visual_mapping',
-            executable='dino_cost',
-            name='dino_cost',
-            parameters=[{'use_sim_time': LaunchConfiguration('use_sim_time')}],
-        ),
+        # Node(
+        #     package='physics_atv_visual_mapping',
+        #     executable='dino_cost',
+        #     name='dino_cost',
+        #     parameters=[{'use_sim_time': LaunchConfiguration('use_sim_time')}],
+        # ),
         # Static Transform Publisher node (ROS2 Zed Driver)
         Node(
             package='tf2_ros',

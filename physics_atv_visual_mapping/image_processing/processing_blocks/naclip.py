@@ -1,6 +1,7 @@
 from physics_atv_visual_mapping.image_processing.processing_blocks.base import ImageProcessingBlock
 from physics_atv_visual_mapping.image_processing.third_party.clip_utils import clip
 from physics_atv_visual_mapping.image_processing.third_party.clip_utils.imagenet_template import openai_imagenet_template
+import torch
 
 class NAClipBlock(ImageProcessingBlock):
     """
@@ -11,6 +12,8 @@ class NAClipBlock(ImageProcessingBlock):
         self.naclip_model, _ = clip.load("ViT-B/16", device=device, jit=False)
         self.naclip_model.eval()
         self.naclip_model.visual.set_params(arch="reduced", attn_strategy="naclip", gaussian_std=5.)
+        
+        self.device = device
 
     def run(self, image, intrinsics, image_orig):
 
@@ -39,3 +42,27 @@ class NAClipBlock(ImageProcessingBlock):
         intrinsics[:, 1, 2] *= (dy/iy)
 
         return img_out, intrinsics
+    
+    def default_text_feats(self, labels):
+        
+        text_features = []
+        
+        for qw in labels:
+            prompts = [qw]
+            query = clip.tokenize(prompts).to(self.device)
+            feature = self.naclip_model.encode_text(query)
+            feature /= feature.norm(dim=-1, keepdim=True)
+            feature = feature.mean(dim=0)
+            feature /= feature.norm()
+            text_features.append(feature.unsqueeze(0))
+        
+        # query = clip.tokenize(labels).to(self.device)
+        # feature = self.naclip_model.encode_text(query)
+        # feature /= feature.norm(dim=-1, keepdim=True)
+        # feature = feature.mean(dim=0)
+        # feature /= feature.norm()
+        # text_features.append(feature.unsqueeze(0))
+        
+        text_features = torch.cat(text_features, dim=0)
+            
+        return text_features

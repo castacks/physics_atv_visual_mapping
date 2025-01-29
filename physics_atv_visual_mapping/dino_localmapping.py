@@ -68,6 +68,7 @@ class DinoMappingNode(Node):
         self.pcl_pub = self.create_publisher(PointCloud2, '/dino_pcl', 1)
         self.gridmap_pub = self.create_publisher(GridMap, '/dino_gridmap', 1)
         self.image_pub = self.create_publisher(Image, '/dino_image', 1)
+        self.clip_text_feats_pub = self.create_publisher(Float32MultiArray, '/clip_text_feats', 1)
 
         self.timer = self.create_timer(0.2, self.spin)
         self.viz = config['viz']
@@ -176,13 +177,24 @@ class DinoMappingNode(Node):
         # self.get_logger().info("pcl_odom.shape {}".format(pcl_odom.shape))
         # self.get_logger().info("dino_pcl.shape {}".format(dino_pcl.shape))
         
+        # CLIP only: send text features
+        # TODO: change labels to general case (also needs to change dino_cost.py)
+        text_feats = None
+        for (i, block) in enumerate(self.image_pipeline.blocks):
+            if block.__class__.__name__ == 'NAClipBlock':
+                labels = ['obstacle', 'grass', 'sidewalk']
+                text_feats = block.default_text_feats(labels)
+                # self.get_logger().info("text_feats.shape {}".format(text_feats.shape))
+                break
+        
         return {
             'pcl': pcl_odom,
             'metadata': _metadata,
             'image': img,
             'dino_image': dino_img,
             'dino_pcl': dino_pcl,
-            'pixel_projection': pixel_coordinates[ind_in_frame]
+            'pixel_projection': pixel_coordinates[ind_in_frame],
+            'clip_text_feats': text_feats
         }
         
     def update_localmap(self, pcl, metadata):
@@ -469,6 +481,31 @@ class DinoMappingNode(Node):
             msg.data = xyzcolor.tobytes()  # Convert to bytes
 
         return msg
+    
+    def make_clip_text_feats_msg(self, text_feats):
+        """
+        Convert text features into message
+        """
+        msg = Float32MultiArray()
+        msg.layout.dim.append(
+            MultiArrayDimension(
+                label="text_feat_index",
+                size=text_feats.shape[0],
+                stride=text_feats.shape[0]
+            )
+        )
+        msg.layout.dim.append(
+            MultiArrayDimension(
+                label="text_feat_dim",
+                size=text_feats.shape[1],
+                stride=text_feats.shape[1] * text_feats.shape[0]
+            )
+        )
+
+        msg.data = text_feats.flatten().tolist()
+        
+        return msg
+    
 
     def publish_messages(self, res):
         """
@@ -500,6 +537,11 @@ class DinoMappingNode(Node):
         img_msg = self.bridge.cv2_to_imgmsg(viz_img.astype(np.uint8), "rgb8")
         img_msg.header.stamp = pcl_msg.header.stamp
         self.image_pub.publish(img_msg)
+        
+        if res['clip_text_feats'] is not None:
+            clip_text_feats_msg = self.make_clip_text_feats_msg(res['clip_text_feats'])
+            self.clip_text_feats_pub.publish(clip_text_feats_msg)
+        
     def spin(self):
         self.get_logger().info('spinning...')
 

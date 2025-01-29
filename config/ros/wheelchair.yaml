@@ -101,10 +101,10 @@ image_processing:
         args:
             image_insize: [728, 420]
 
-    - 
-        type: pca
-        args:
-            fp: on_the_fly
+    # - 
+    #     type: pca
+    #     args:
+    #         fp: on_the_fly # compute PCA on the fly instead of using precomputed weights
             # fp: /wheelsafe_ws/src/physics_atv_visual_mapping/data/pca/pca_vitb10_value.pt
 
 localmapping:

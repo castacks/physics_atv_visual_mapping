@@ -80,7 +80,7 @@ terrain_estimation:
             kernel_params:
                 kernel_type: gaussian #one of {gaussian/box} the kernel type to use for inflation
 
-                kernel_radius: 0.5 #kernel radius in m
+                kernel_radius: 3.0 #kernel radius in m
                 kernel_sharpness: 1.0 #sharpness of (Gaussian) kernel
 
     - 
@@ -89,15 +89,15 @@ terrain_estimation:
             input_layer: min_elevation_filtered_inflated
             mask_layer: min_elevation_filtered_inflated_mask
 
-            itrs: 1   #num updates
-            alpha: 5. #weight on the measurement update
+            itrs: 5   #num updates
+            alpha: 1. #weight on the measurement update
             beta: 10.  #weight on the neighbor update
             lr: 0.05   #learning rate
 
             kernel_params:
                 kernel_type: gaussian #one of {gaussian/box} the kernel type to use for inflation
 
-                kernel_radius: 0.5
+                kernel_radius: 3.0
                 kernel_sharpness: 1.0
 
     - 
@@ -112,7 +112,7 @@ terrain_estimation:
             terrain_layer: terrain
             max_elevation_layer: max_elevation
             max_elevation_mask_layer: num_voxels
-            overhang: 1.0
+            overhang: 100.0
     -
         type: terrain_aware_bev_feature_splat
         args:

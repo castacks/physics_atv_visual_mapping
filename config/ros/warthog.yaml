@@ -112,7 +112,7 @@ terrain_estimation:
             terrain_layer: terrain
             max_elevation_layer: max_elevation
             max_elevation_mask_layer: num_voxels
-            overhang: 100.0
+            overhang: 2.0 #done to match irl yamaha values
     -
         type: terrain_aware_bev_feature_splat
         args:

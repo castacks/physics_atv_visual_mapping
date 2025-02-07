@@ -149,7 +149,7 @@ class DinoMappingNode(Node):
         start_time = time.time()
         dino_img, dino_intrinsics = self.image_pipeline.run(img, self.intrinsics.unsqueeze(0))
         torch.cuda.synchronize()
-        self.get_logger().info('size of img: {}, time to process image: {}'.format(img.shape, time.time()-start_time))
+        # self.get_logger().info('size of img: {}, time to process image: {}'.format(img.shape, time.time()-start_time))
         # dino_img = img.to(self.device)
         # dino_intrinsics = self.intrinsics.unsqueeze(0).to(self.device)
         dino_img = dino_img[0].permute(1, 2, 0)
@@ -163,7 +163,7 @@ class DinoMappingNode(Node):
         
         pixel_coordinates = get_pixel_from_3D_source(pcl[:, :3], P)
         torch.cuda.synchronize()
-        self.get_logger().info('time to project pcl: {} PCL shape: {}, Pixel shape: {}'.format(time.time()-start_time, pcl.shape, pixel_coordinates.shape))
+        # self.get_logger().info('time to project pcl: {} PCL shape: {}, Pixel shape: {}'.format(time.time()-start_time, pcl.shape, pixel_coordinates.shape))
 
         torch.cuda.synchronize()
         start_time = time.time()
@@ -174,14 +174,14 @@ class DinoMappingNode(Node):
             dino_img.shape[1]
         )
         torch.cuda.synchronize()
-        self.get_logger().info('time to get points and pixels in frame: {}'.format(time.time()-start_time))
+        # self.get_logger().info('time to get points and pixels in frame: {}'.format(time.time()-start_time))
 
         torch.cuda.synchronize()
         start_time = time.time()
         dino_features = dino_img[pixels_in_frame[:, 1], pixels_in_frame[:, 0]]
         dino_pcl = torch.cat([pcl_odom[ind_in_frame][:, :3], dino_features], dim=-1)
         torch.cuda.synchronize()
-        self.get_logger().info('time to get features: {}'.format(time.time()-start_time))
+        # self.get_logger().info('time to get features: {}'.format(time.time()-start_time))
         
         return {
             'pcl': pcl_odom,
@@ -218,9 +218,11 @@ class DinoMappingNode(Node):
         gridmap_msg = GridMap()
 
         gridmap_data = localmap['data'].cpu().numpy()
+        gridmap_known = localmap['known'].cpu().numpy()
+        self.get_logger().info('gridmap_known shape: {}'.format(gridmap_known.shape))
 
         #setup metadata
-        print("gridmap_msg", dir(gridmap_msg.info))
+        # print("gridmap_msg", dir(gridmap_msg.info))
         gridmap_msg.header.stamp = self.img_msg.header.stamp
         gridmap_msg.header.frame_id = self.odom_frame
         
@@ -280,7 +282,31 @@ class DinoMappingNode(Node):
 
             # gridmap_layer_msg.data = flipped_layer_data[i].flatten().tolist()
             gridmap_msg.data.append(gridmap_layer_msg)
-        self.get_logger().info('time to flatten layer {}: {}'.format(i, accum_time))
+        # self.get_logger().info('time to flatten layer {}: {}'.format(i, accum_time))
+        #add known / unknown layer
+        gridmap_msg.layers.append('known')
+        layer_data_before_flips = gridmap_known.astype(np.float32)
+        layer_data = np.transpose(np.flip(layer_data_before_flips, axis=(0, 1)), axes=(1, 0))
+        gridmap_layer_msg = Float32MultiArray()
+        gridmap_layer_msg.layout.dim.append(
+            MultiArrayDimension(
+                label="column_index",
+                size=layer_data.shape[0],
+                stride=layer_data.shape[0]
+            )
+        )
+        gridmap_layer_msg.layout.dim.append(
+            MultiArrayDimension(
+                label="row_index",
+                size=layer_data.shape[0],
+                stride=layer_data.shape[0] * layer_data.shape[1]
+            )
+        )
+        gridmap_layer_msg.data = layer_data.flatten().tolist()
+        gridmap_msg.data.append(gridmap_layer_msg)
+
+
+        gridmap_layer_msg.data = layer_data.flatten().tolist()
         #add dummy elevation
         gridmap_msg.layers.append('elevation')
         layer_data = np.zeros_like(gridmap_data[...,0]) + self.odom_msg.pose.pose.position.z - 1.73
@@ -397,7 +423,7 @@ class DinoMappingNode(Node):
         msg = ros2_numpy.msgify(PointCloud2, xyzcolor)
         msg.header.frame_id = self.odom_frame
         msg.header.stamp = self.pcl_msg.header.stamp
-        self.get_logger().info('pcl total time: {}'.format(time.time()-start_time))
+        # self.get_logger().info('pcl total time: {}'.format(time.time()-start_time))
 
         return msg
 
@@ -506,7 +532,7 @@ class DinoMappingNode(Node):
         img_msg.header.stamp = pcl_msg.header.stamp
         self.image_pub.publish(img_msg)
     def spin(self):
-        self.get_logger().info('spinning...')
+        # self.get_logger().info('spinning...')
 
         start_time = time.time()
         res = self.preprocess_inputs()
@@ -522,10 +548,10 @@ class DinoMappingNode(Node):
             after_update_time = time.time()
             self.publish_messages(res)
             after_publish_time = time.time()
-            self.get_logger().info('preprocess time: {}'.format(after_preprocess_time-start_time))
-            self.get_logger().info('update time: {}'.format(after_update_time-start_time))
-            self.get_logger().info('publish time: {}'.format(after_publish_time-after_update_time))
-            self.get_logger().info('total time: {}'.format(time.time()-start_time))
+            # self.get_logger().info('preprocess time: {}'.format(after_preprocess_time-start_time))
+            # self.get_logger().info('update time: {}'.format(after_update_time-start_time))
+            # self.get_logger().info('publish time: {}'.format(after_publish_time-after_update_time))
+            # self.get_logger().info('total time: {}'.format(time.time()-start_time))
 
 
 def main(args=None):

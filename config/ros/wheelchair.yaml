@@ -117,10 +117,10 @@ localmapping:
         # length_y: 80.
         # resolution: 0.5
 
-       origin: [-8., -8.]
-       length_x: 16.0
-       length_y: 16.0
-       resolution: 0.25
+       origin: [-16., -16.]
+       length_x: 32.0
+       length_y: 32.0
+       resolution: 0.5
 
        # origin: [-20., -20.]
        # length_x: 40.

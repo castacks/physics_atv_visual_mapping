@@ -2,9 +2,11 @@ import torch
 import torch_scatter
 import open3d as o3d
 
-from physics_atv_visual_mapping.localmapping.base import LocalMapper
-from physics_atv_visual_mapping.utils import *
+from numpy import pi as PI
 
+from physics_atv_visual_mapping.localmapping.base import LocalMapper
+from physics_atv_visual_mapping.localmapping.voxel.raycasting import *
+from physics_atv_visual_mapping.utils import *
 
 class VoxelLocalMapper(LocalMapper):
     """Class for local mapping voxels"""
@@ -32,7 +34,7 @@ class VoxelLocalMapper(LocalMapper):
         self.voxel_grid.shift(px_shift)
         self.metadata.origin = new_origin
 
-    def add_pc(self, pts: torch.Tensor):
+    def add_pc(self, pos: torch.Tensor, pts: torch.Tensor):
         #this op is rather simple, as all we need to do is copy over the new idxs to aggregator
         voxel_grid_new = VoxelGrid.from_pc(pts, self.metadata)
 
@@ -54,8 +56,79 @@ class VoxelLocalMapper(LocalMapper):
 
         # o3d.visualization.draw_geometries([voxel_grid, pc_in])
 
-    def add_feature_pc(self, pts: torch.Tensor, features: torch.Tensor):
+    def add_feature_pc(self, pos: torch.Tensor, pts: torch.Tensor, features: torch.Tensor, do_raycast=False):
         voxel_grid_new = VoxelGrid.from_feature_pc(pts, features[:, :self.n_features], self.metadata)
+
+        if do_raycast:
+            """
+            Raycast implementation is as follows:
+                1. spherically bin new points and record max range
+                2. for each old point
+                    a. find the corresponding spherical bin and range
+                    b. if less than new point range, is passthrough, else leave alone
+            """
+            n_el = 360 * 3
+            n_az = 360 * 3
+
+            voxel_pts = voxel_grid_new.grid_indices_to_pts(voxel_grid_new.raster_indices_to_grid_indices(voxel_grid_new.indices))
+            voxel_el_az_range = get_el_az_range_from_xyz(pos, voxel_pts)
+            voxel_maxdist_el_az_bins = bin_el_az_range(voxel_el_az_range, n_el=n_el, n_az=n_az, reduce='max')
+
+            voxel_from_el_az = get_xyz_from_el_az_range(pos, voxel_el_az_range)
+
+            el_bins = torch.linspace(0, 2*PI, n_el, device=voxel_grid_new.device)
+            az_bins = torch.linspace(0, 2*PI, n_az, device=voxel_grid_new.device)
+            el_az = torch.stack(torch.meshgrid(el_bins, az_bins, indexing='ij'), dim=-1)
+            voxel_maxdist_sph = torch.cat([el_az.view(-1, 2), voxel_maxdist_el_az_bins.view(-1, 1)], dim=-1)
+            voxel_maxdist_sph = voxel_maxdist_sph[voxel_maxdist_sph[:, 2] > 1e-6]
+            voxel_maxdist_xyz = get_xyz_from_el_az_range(pos, voxel_maxdist_sph)
+
+            #debug spherical projection/binning
+            """
+            import open3d as o3d
+            pc = o3d.geometry.PointCloud()
+            pc.points = o3d.utility.Vector3dVector(voxel_maxdist_xyz.cpu().numpy())
+            pc.paint_uniform_color([1., 0., 0.])
+
+            voxel_pc = o3d.geometry.PointCloud()
+            voxel_pc.points = o3d.utility.Vector3dVector(voxel_pts.cpu().numpy())
+
+            origin = o3d.geometry.TriangleMesh.create_coordinate_frame(origin=pos.cpu().numpy())
+            o3d.visualization.draw_geometries([pc, voxel_pc, origin])
+
+            #debug
+            import matplotlib.pyplot as plt
+            plt.imshow(voxel_maxdist_el_az_bins.reshape(n_el, n_az).cpu().numpy(), vmin=0., cmap='jet', origin='lower')
+            plt.show()
+            """
+
+            agg_voxel_pts = self.voxel_grid.grid_indices_to_pts(self.voxel_grid.raster_indices_to_grid_indices(self.voxel_grid.indices))
+            agg_voxel_el_az_range = get_el_az_range_from_xyz(pos, agg_voxel_pts)
+            agg_voxel_bin_idxs = get_el_az_range_bin_idxs(agg_voxel_el_az_range, n_el, n_az)
+
+            voxel_maxdist_el_az_bins[voxel_maxdist_el_az_bins < 1e-6] = -1e10
+
+            agg_ranges = agg_voxel_el_az_range[:, 2]
+            query_ranges = voxel_maxdist_el_az_bins[agg_voxel_bin_idxs]
+            passthrough_mask = query_ranges > agg_ranges
+
+            # import open3d as o3d
+            # pc_passthrough = o3d.geometry.PointCloud()
+            # pc_passthrough.points = o3d.utility.Vector3dVector(agg_voxel_pts[passthrough_mask].cpu().numpy())
+            
+            # pc_hits = o3d.geometry.PointCloud()
+            # pc_hits.points = o3d.utility.Vector3dVector(voxel_maxdist_xyz.cpu().numpy())
+            # pc_hits.paint_uniform_color([1., 0., 0.])
+
+            # origin = o3d.geometry.TriangleMesh.create_coordinate_frame(origin=pos.cpu().numpy())
+            # o3d.visualization.draw_geometries([pc_passthrough, pc_hits, origin])
+
+            # self.voxel_grid.indices = self.voxel_grid.indices[~passthrough_mask]
+            # self.voxel_grid.all_indices = self.voxel_grid.all_indices[~passthrough_mask]
+            # self.voxel_grid.features = self.voxel_grid.features[~passthrough_mask]
+
+            #dont increment hits, do that in the aggregate step
+            self.voxel_grid.misses += passthrough_mask.float()
 
         all_raster_idxs = torch.cat([self.voxel_grid.indices, voxel_grid_new.indices])
         unique_idxs, inv_idxs, counts = torch.unique(
@@ -89,13 +162,53 @@ class VoxelLocalMapper(LocalMapper):
             self.ema * voxel_grid_new.features[vg2_is_collision]
         )
 
+        hit_buf = torch.zeros(
+            unique_idxs.shape[0],
+            device=self.voxel_grid.device,
+        )
+        hit_buf[vg1_inv_idxs] += self.voxel_grid.hits
+        hit_buf[vg2_inv_idxs] += voxel_grid_new.hits
+
+        miss_buf = torch.zeros(
+            unique_idxs.shape[0],
+            device=self.voxel_grid.device,
+        )
+        miss_buf[vg1_inv_idxs] += self.voxel_grid.misses
+        miss_buf[vg2_inv_idxs] += voxel_grid_new.misses
+
         self.voxel_grid.indices = unique_idxs
         self.voxel_grid.features = feat_buf
 
-        #ok now also merge the non-feature voxels
+        self.voxel_grid.hits = hit_buf
+        self.voxel_grid.misses = miss_buf
+
+        # #ok now also merge the non-feature voxels
         all_raster_idxs = torch.cat([self.voxel_grid.all_indices, voxel_grid_new.all_indices])
         unique_idxs = torch.unique(all_raster_idxs)
         self.voxel_grid.all_indices = unique_idxs
+
+        #compute passthrough rate
+        passthrough_rate = self.voxel_grid.misses / (self.voxel_grid.hits + self.voxel_grid.misses)
+
+        cull_mask = passthrough_rate > 0.75
+
+        # print('culling {} voxels...'.format(cull_mask.sum()))
+
+        # import open3d as o3d
+        # pts = self.voxel_grid.grid_indices_to_pts(self.voxel_grid.raster_indices_to_grid_indices(self.voxel_grid.indices))
+        # #solid=black, porous=green, cull=red
+        # colors = torch.stack([torch.zeros_like(passthrough_rate), passthrough_rate, torch.zeros_like(passthrough_rate)], dim=-1)
+        # colors[cull_mask] = torch.tensor([1., 0., 0.], device=self.device)
+        # porosity_pc = o3d.geometry.PointCloud()
+        # porosity_pc.points = o3d.utility.Vector3dVector(pts.cpu().numpy())
+        # porosity_pc.colors = o3d.utility.Vector3dVector(colors.cpu().numpy())
+        # o3d.visualization.draw_geometries([porosity_pc])
+
+        self.voxel_grid.features = self.voxel_grid.features[~cull_mask]
+        self.voxel_grid.hits = self.voxel_grid.hits[~cull_mask]
+        self.voxel_grid.misses = self.voxel_grid.misses[~cull_mask]
+        self.voxel_grid.all_indices = self.voxel_grid.indices[~cull_mask]
+        self.voxel_grid.indices = self.voxel_grid.indices[~cull_mask]
 
     def to(self, device):
         self.device = device
@@ -134,6 +247,9 @@ class VoxelGrid:
 
         voxelgrid.all_indices = unique_raster_idxs
 
+        voxelgrid.hits = torch.ones(unique_raster_idxs.shape[0], device=voxelgrid.device)
+        voxelgrid.misses = torch.zeros(unique_raster_idxs.shape[0], device=voxelgrid.device)
+
         return voxelgrid
 
     def from_pc(pts, metadata):
@@ -150,6 +266,9 @@ class VoxelGrid:
 
         voxelgrid.all_indices = unique_raster_idxs
 
+        voxelgrid.hits = torch.ones(unique_raster_idxs.shape[0], device=voxelgrid.device)
+        voxelgrid.misses = torch.zeros(unique_raster_idxs.shape[0], device=voxelgrid.device)
+
         return voxelgrid
 
     def __init__(self, metadata, n_features, device):
@@ -161,6 +280,9 @@ class VoxelGrid:
         #not sure this is the bast way to do things, but for now add
         #  another index list that doesnt have corresponding features
         self.all_indices = torch.zeros(0, dtype=torch.long, device=device)
+
+        self.hits = torch.zeros(0, dtype=torch.float, device=device) + 1e-8
+        self.misses = torch.zeros(0, dtype=torch.float, device=device)
 
         self.device = device
 
@@ -193,6 +315,8 @@ class VoxelGrid:
         mask = self.grid_idxs_in_bounds(grid_indices)
         self.indices = self.grid_indices_to_raster_indices(grid_indices[mask])
         self.features = self.features[mask]
+        self.hits = self.hits[mask]
+        self.misses = self.misses[mask]
 
         #shift all indices
         grid_indices = self.raster_indices_to_grid_indices(self.all_indices)
@@ -312,4 +436,6 @@ class VoxelGrid:
         self.device = device
         self.indices = self.indices.to(device)
         self.features = self.features.to(device)
+        self.hits = self.hits.to(device)
+        self.misses = self.misses.to(device)
         return self

@@ -48,7 +48,7 @@ image_processing:
         type: radio
         args:
             radio_type: radio_v2.5-b # radio_v2 e-radio_v2
-            image_insize: [672, 352]  # Original Image Size must be divisible by 16
+            image_insize: [336, 176]  # Original Image Size must be divisible by 16
 
     - 
         type: pca
@@ -65,7 +65,7 @@ localmapping:
     metadata:
         origin: [-20., -20., -3.]
         length: [40., 40., 6.]
-        resolution: [0.1, 0.1, 0.1]
+        resolution: [0.2, 0.2, 0.2]
         # origin: [-30., -30., -15.]
         # length: [60., 60., 30.]
         # resolution: [0.2, 0.2, 0.2]
@@ -135,14 +135,14 @@ terrain_estimation:
             terrain_layer: terrain
             max_elevation_layer: max_elevation
             max_elevation_mask_layer: num_voxels
-            overhang: 2.0
+            overhang: 0.5
     -
         type: terrain_aware_bev_feature_splat
         args:
             output_key: dino
             terrain_layer: terrain
             terrain_mask_layer: min_elevation_filtered_inflated_mask
-            overhang: 1.7
+            overhang: 0.5
 
 device: cuda
 viz: True

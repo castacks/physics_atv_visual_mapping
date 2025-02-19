@@ -67,8 +67,8 @@ class VoxelLocalMapper(LocalMapper):
                     a. find the corresponding spherical bin and range
                     b. if less than new point range, is passthrough, else leave alone
             """
-            n_el = 360 * 3
-            n_az = 360 * 3
+            n_az = int(1.0 * 960 * 360/110)
+            n_el = int(1.0 * 640 * 360/70)
 
             voxel_pts = voxel_grid_new.grid_indices_to_pts(voxel_grid_new.raster_indices_to_grid_indices(voxel_grid_new.indices))
             voxel_el_az_range = get_el_az_range_from_xyz(pos, voxel_pts)
@@ -106,7 +106,11 @@ class VoxelLocalMapper(LocalMapper):
             agg_voxel_el_az_range = get_el_az_range_from_xyz(pos, agg_voxel_pts)
             agg_voxel_bin_idxs = get_el_az_range_bin_idxs(agg_voxel_el_az_range, n_el, n_az)
 
-            voxel_maxdist_el_az_bins[voxel_maxdist_el_az_bins < 1e-6] = -1e10
+            # set const to negative to not clear on empty hits
+            # voxel_maxdist_el_az_bins[voxel_maxdist_el_az_bins < 1e-6] = -1e10
+
+            # set const to large pos to clear on empty hits
+            voxel_maxdist_el_az_bins[voxel_maxdist_el_az_bins < 1e-6] = 1e10
 
             agg_ranges = agg_voxel_el_az_range[:, 2]
             query_ranges = voxel_maxdist_el_az_bins[agg_voxel_bin_idxs]

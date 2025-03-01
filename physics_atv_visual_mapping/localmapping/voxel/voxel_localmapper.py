@@ -274,7 +274,7 @@ class VoxelGrid:
 
         #NOTE: we need the voxel raster indices to be in ascending order (at least, within feat/no-feat) for stuff to work
         feature_raster_idxs, inv_idxs = torch.unique(
-            valid_raster_idxs, return_inverse=True, sort=True
+            valid_raster_idxs, return_inverse=True, sorted=True
         )
         
         feat_buf = torch_scatter.scatter(

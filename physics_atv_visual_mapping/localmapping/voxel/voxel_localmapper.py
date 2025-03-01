@@ -272,7 +272,7 @@ class VoxelGrid:
 
         valid_raster_idxs = voxelgrid.grid_indices_to_raster_indices(valid_grid_idxs)
 
-        #NOTE: we need the voxel raster indices to be in ascending order for stuff to work
+        #NOTE: we need the voxel raster indices to be in ascending order (at least, within feat/no-feat) for stuff to work
         feature_raster_idxs, inv_idxs = torch.unique(
             valid_raster_idxs, return_inverse=True, sort=True
         )

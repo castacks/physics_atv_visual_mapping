@@ -208,11 +208,11 @@ if __name__ == "__main__":
     )
     plt.bar(
         np.arange(avg_feat_norm.shape[0]),
-        avg_feat_norm,
+        np.cumsum(avg_feat_norm/avg_total_feat_norm),
         color="b",
         label="pca component norm",
     )
-    plt.bar([avg_feat_norm.shape[0]], avg_residual, color="r", label="residual norm")
+    plt.bar([avg_feat_norm.shape[0]], avg_residual / avg_total_feat_norm, color="r", label="residual norm")
     plt.legend()
     plt.show()
 

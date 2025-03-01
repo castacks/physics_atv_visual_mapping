@@ -49,6 +49,7 @@ image_processing:
         args:
             radio_type: radio_v2.5-b # radio_v2 e-radio_v2
             image_insize: [672, 352]  # Original Image Size must be divisible by 16
+            # image_insize: [1344, 704]
 
     - 
         type: pca
@@ -63,12 +64,19 @@ localmapping:
     ema: 0.5 #higher->use recent more
     n_features: 16
     metadata:
-        origin: [-60., -60., -30.]
-        length: [120., 120., 60.]
+        # origin: [-100., -100., -30.]
+        # length: [200., 200., 60.]
+        # resolution: [0.8, 0.8, 0.8]
+        origin: [-50., -50., -10.]
+        length: [100., 100., 20.]
         resolution: [0.4, 0.4, 0.4]
         # origin: [-30., -30., -15.]
         # length: [60., 60., 30.]
         # resolution: [0.2, 0.2, 0.2]
+
+    raytracing:
+        # type: VLP32C
+        # args: {}
 
 terrain_estimation:
     -

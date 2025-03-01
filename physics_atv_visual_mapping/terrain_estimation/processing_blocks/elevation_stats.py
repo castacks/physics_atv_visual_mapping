@@ -26,7 +26,7 @@ class ElevationStats(TerrainEstimationBlock):
         num_voxels_idx = bev_grid.feature_keys.index(self.output_keys[3])
 
         #get grid idxs and coordinates of voxel grid
-        voxel_grid_idxs = voxel_grid.raster_indices_to_grid_indices(voxel_grid.all_indices)
+        voxel_grid_idxs = voxel_grid.raster_indices_to_grid_indices(voxel_grid.raster_indices)
         voxel_grid_pts = voxel_grid.grid_indices_to_pts(voxel_grid_idxs, centers=True)
 
         #bev grid idxs are the first 2 dims of the voxel idxs assuming matching metadata

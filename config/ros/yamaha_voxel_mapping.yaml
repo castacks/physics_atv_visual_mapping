@@ -74,9 +74,20 @@ localmapping:
         # length: [60., 60., 30.]
         # resolution: [0.2, 0.2, 0.2]
 
-    raytracing:
-        # type: VLP32C
-        # args: {}
+    raytracer:
+        type: frustum
+        sensor:
+            # type: VLP32C
+            
+            type: generic
+        
+            n_el: 1080 #number of bins
+            el_range: [-180., 180.] #min/max angle
+            el_thresh: default #optional arg to filter based on remainder
+
+            n_az: 1080
+            az_range: [-180., 180.]
+            az_thresh: default
 
 terrain_estimation:
     -

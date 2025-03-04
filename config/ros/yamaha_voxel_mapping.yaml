@@ -81,12 +81,12 @@ localmapping:
             
             type: generic
         
-            n_el: 1080 #number of bins
-            el_range: [-180., 180.] #min/max angle
+            n_el: 32 #number of bins
+            el_range: [-25., 15.] #min/max angle
             el_thresh: default #optional arg to filter based on remainder
 
-            n_az: 1080
-            az_range: [-180., 180.]
+            n_az: 360
+            az_range: [-45., 45.]
             az_thresh: default
 
 terrain_estimation:

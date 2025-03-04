@@ -26,6 +26,8 @@ class FrustumRaytracer:
     def raytrace(self, pose, voxel_grid_meas, voxel_grid_agg):
         """
         Actual raytracing interface
+
+        TODO: we're raycasting in global but the sensor is in local. Rotate the bins into local using pose
         """
         voxel_pts = voxel_grid_meas.grid_indices_to_pts(voxel_grid_meas.raster_indices_to_grid_indices(voxel_grid_meas.raster_indices))
         voxel_el_az_range = get_el_az_range_from_xyz(pose[:3], voxel_pts)
@@ -33,26 +35,27 @@ class FrustumRaytracer:
 
         voxel_from_el_az = get_xyz_from_el_az_range(pose[:3], voxel_el_az_range)
 
-        el_bins = torch.linspace(0, 2*PI, n_el, device=voxel_grid_meas.device)
-        az_bins = torch.linspace(0, 2*PI, n_az, device=voxel_grid_meas.device)
-        el_az = torch.stack(torch.meshgrid(el_bins, az_bins, indexing='ij'), dim=-1)
+        el_az = torch.stack(torch.meshgrid(self.sensor_model["el_bins"][:-1], self.sensor_model["az_bins"][:-1], indexing='ij'), dim=-1)
         voxel_maxdist_sph = torch.cat([el_az.view(-1, 2), voxel_maxdist_el_az_bins.view(-1, 1)], dim=-1)
         voxel_maxdist_sph = voxel_maxdist_sph[voxel_maxdist_sph[:, 2] > 1e-6]
         voxel_maxdist_xyz = get_xyz_from_el_az_range(pose[:3], voxel_maxdist_sph)
 
         agg_voxel_pts = voxel_grid_agg.grid_indices_to_pts(voxel_grid_agg.raster_indices_to_grid_indices(voxel_grid_agg.raster_indices))
         agg_voxel_el_az_range = get_el_az_range_from_xyz(pose[:3], agg_voxel_pts)
-        agg_voxel_bin_idxs = get_el_az_range_bin_idxs(agg_voxel_el_az_range, n_el, n_az)
+        agg_voxel_bin_idxs = get_el_az_range_bin_idxs(agg_voxel_el_az_range, sensor_model=self.sensor_model)
+
+        #bin idx == -1 iff. outside sensor fov
+        agg_voxel_valid_bin = (agg_voxel_bin_idxs >= 0)
 
         #set to large negative to not filter on misses
-        voxel_maxdist_el_az_bins[voxel_maxdist_el_az_bins < 1e-6] = -1e10
+        # voxel_maxdist_el_az_bins[voxel_maxdist_el_az_bins < 1e-6] = -1e10
 
         #set to lidar range to filter on misses
-        # voxel_maxdist_el_az_bins[voxel_maxdist_el_az_bins < 1e-6] = 200.
+        voxel_maxdist_el_az_bins[voxel_maxdist_el_az_bins < 1e-6] = 200.
 
         agg_ranges = agg_voxel_el_az_range[:, 2]
         query_ranges = voxel_maxdist_el_az_bins[agg_voxel_bin_idxs]
-        passthrough_mask = query_ranges > agg_ranges
+        passthrough_mask = (query_ranges > agg_ranges) & agg_voxel_valid_bin
 
         #dont increment hits, do that in the aggregate step
         voxel_grid_agg.misses += passthrough_mask.float()
@@ -156,10 +159,15 @@ def bin_el_az_range(el_az_range, sensor_model, reduce='max'):
     """
     bin elevation and azimuth in to discrete bins and take the 'reduce' of data for each bin
     """
+    #binedges are inclusive
+    n_az = sensor_model["az_bins"].shape[0] - 1
+    n_el = sensor_model["el_bins"].shape[0] - 1
     raster_idxs = get_el_az_range_bin_idxs(el_az_range, sensor_model)
 
+    valid_mask = (raster_idxs > 0)
+
     #placeholder of zero should be ok?
-    out = torch_scatter.scatter(src=el_az_range[..., 2], index=raster_idxs, dim_size=n_el*n_az, reduce=reduce)
+    out = torch_scatter.scatter(src=el_az_range[..., 2][valid_mask], index=raster_idxs[valid_mask], dim_size=n_el*n_az, reduce=reduce)
 
     return out
 
@@ -167,18 +175,30 @@ def get_el_az_range_bin_idxs(el_az_range, sensor_model):
     """
     assume that angles in +-180
     """
-    import pdb;pdb.set_trace()
+    #binedges are inclusive
+    n_az = sensor_model["az_bins"].shape[0] - 1
+    n_el = sensor_model["el_bins"].shape[0] - 1
+
     #subtracting 1 to get the idx of the lower edge
     el_idxs = torch.bucketize(el_az_range[:, 0], sensor_model["el_bins"]) - 1
     az_idxs = torch.bucketize(el_az_range[:, 1], sensor_model["az_bins"]) - 1
 
-
-    el_disc = 2*PI / n_el
-    az_disc = 2*PI / n_az
-
-    el_idxs = (el_az_range[..., 0] / el_disc).long()
-    az_idxs = (el_az_range[..., 1] / az_disc).long()
-
     raster_idxs = el_idxs * n_az + az_idxs
+
+    #compute and evaluate residual, as elems can fall outside bin edges
+    el_res = (el_az_range[:, 0] - sensor_model["el_bins"][el_idxs])
+    az_res = (el_az_range[:, 1] - sensor_model["az_bins"][az_idxs])
+
+    el_invalid = (el_res < 0.) | (el_res > sensor_model["el_thresh"])
+    az_invalid = (az_res < 0.) | (az_res > sensor_model["az_thresh"])
+
+    #also filter out idxs at binedges
+    el_oob = (el_idxs == -1) | (el_idxs == n_el)
+    az_oob = (az_idxs == -1) | (az_idxs == n_az)
+
+    invalid_mask = el_invalid | el_oob | az_invalid | az_oob
+
+    #set invalid pts to -1 raster
+    raster_idxs[invalid_mask] = -1
 
     return raster_idxs

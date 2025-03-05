@@ -47,10 +47,10 @@ class FrustumRaytracer:
         agg_voxel_valid_bin = (agg_voxel_bin_idxs >= 0)
 
         #set to large negative to not filter on misses
-        # voxel_maxdist_el_az_bins[voxel_maxdist_el_az_bins < 1e-6] = -1e10
+        voxel_maxdist_el_az_bins[voxel_maxdist_el_az_bins < 1e-6] = -1e10
 
         #set to lidar range to filter on misses
-        voxel_maxdist_el_az_bins[voxel_maxdist_el_az_bins < 1e-6] = 200.
+        # voxel_maxdist_el_az_bins[voxel_maxdist_el_az_bins < 1e-6] = 200.
 
         agg_ranges = agg_voxel_el_az_range[:, 2]
         query_ranges = voxel_maxdist_el_az_bins[agg_voxel_bin_idxs]

@@ -4,8 +4,7 @@ import torch_scatter
 
 from numpy import pi as PI
 
-DEG_2_RAD = PI/180.
-RAD_2_DEG = 180./PI
+from physics_atv_visual_mapping.utils import transform_points, DEG_2_RAD, RAD_2_DEG
 
 class FrustumRaytracer:
     """
@@ -30,18 +29,18 @@ class FrustumRaytracer:
         TODO: we're raycasting in global but the sensor is in local. Rotate the bins into local using pose
         """
         voxel_pts = voxel_grid_meas.grid_indices_to_pts(voxel_grid_meas.raster_indices_to_grid_indices(voxel_grid_meas.raster_indices))
-        voxel_el_az_range = get_el_az_range_from_xyz(pose[:3], voxel_pts)
+        voxel_el_az_range = get_el_az_range_from_xyz(pose, voxel_pts)
         voxel_maxdist_el_az_bins = bin_el_az_range(voxel_el_az_range, sensor_model=self.sensor_model, reduce='max')
 
-        voxel_from_el_az = get_xyz_from_el_az_range(pose[:3], voxel_el_az_range)
+        voxel_from_el_az = get_xyz_from_el_az_range(pose, voxel_el_az_range)
 
         el_az = torch.stack(torch.meshgrid(self.sensor_model["el_bins"][:-1], self.sensor_model["az_bins"][:-1], indexing='ij'), dim=-1)
         voxel_maxdist_sph = torch.cat([el_az.view(-1, 2), voxel_maxdist_el_az_bins.view(-1, 1)], dim=-1)
         voxel_maxdist_sph = voxel_maxdist_sph[voxel_maxdist_sph[:, 2] > 1e-6]
-        voxel_maxdist_xyz = get_xyz_from_el_az_range(pose[:3], voxel_maxdist_sph)
+        voxel_maxdist_xyz = get_xyz_from_el_az_range(pose, voxel_maxdist_sph)
 
         agg_voxel_pts = voxel_grid_agg.grid_indices_to_pts(voxel_grid_agg.raster_indices_to_grid_indices(voxel_grid_agg.raster_indices))
-        agg_voxel_el_az_range = get_el_az_range_from_xyz(pose[:3], agg_voxel_pts)
+        agg_voxel_el_az_range = get_el_az_range_from_xyz(pose, agg_voxel_pts)
         agg_voxel_bin_idxs = get_el_az_range_bin_idxs(agg_voxel_el_az_range, sensor_model=self.sensor_model)
 
         #bin idx == -1 iff. outside sensor fov
@@ -59,6 +58,23 @@ class FrustumRaytracer:
 
         #dont increment hits, do that in the aggregate step
         voxel_grid_agg.misses += passthrough_mask.float()
+
+        # import matplotlib.pyplot as plt
+        # n_el = self.sensor_model['el_bins'].shape[0] - 1
+        # n_az = self.sensor_model['az_bins'].shape[0] - 1
+        # plt.imshow(voxel_maxdist_el_az_bins.reshape(n_el, n_az).cpu().numpy(), vmin=0., cmap='jet', origin='lower')
+        # plt.show()
+
+        # import open3d as o3d
+        # pc_passthrough = o3d.geometry.PointCloud()
+        # pc_passthrough.points = o3d.utility.Vector3dVector(agg_voxel_pts[passthrough_mask].cpu().numpy())
+        
+        # pc_hits = o3d.geometry.PointCloud()
+        # pc_hits.points = o3d.utility.Vector3dVector(voxel_maxdist_xyz.cpu().numpy())
+        # pc_hits.paint_uniform_color([1., 0., 0.])
+
+        # origin = o3d.geometry.TriangleMesh.create_coordinate_frame(origin=pos.cpu().numpy())
+        # o3d.visualization.draw_geometries([pc_passthrough, pc_hits, origin])
 
         return
 
@@ -94,11 +110,32 @@ def setup_sensor_model(sensor_config, device='cpu'):
         }
 
     elif sensor_config["type"] == "VLP32C":
-        pass
+        #from the spec sheet @ 600RPM (https://icave2.cse.buffalo.edu/resources/sensor-modeling/VLP32CManual.pdf)
+        az_bins = DEG_2_RAD * torch.linspace(-180., 180., 1801, dtype=torch.float, device=device)
+        az_thresh = (az_bins[1:] - az_bins[:-1]).min()
+
+        # EL_THRESH = 0.333 #min elev. diff bet. beams
+        EL_THRESH = 0.5 #min elev. diff bet. beams (+ some slop)
+
+        #implement elevation from spec sheet. subtract off half of thresh to get lower bin edges (and copy top bin edge)
+        el_bins = DEG_2_RAD * (torch.tensor([
+         -25.000, -15.6390, -11.3100,  -8.8430,  -7.2540,  -6.1480,  -5.3330,
+         -4.6670,  -4.0000,  -3.6670,  -3.3330,  -3.0000,  -2.6670,  -2.3330,
+         -2.0000,  -1.6670,  -1.0000,  -0.6670,  -0.3330,   0.0000,   0.3330,
+          0.6670,   1.0000,   1.3330,   1.6670,   2.3330,   3.0000,   3.3330,
+          4.6670,   7.0000,  10.3330,  15.0000, 15.+EL_THRESH], dtype=torch.float, device=device) - 0.5*EL_THRESH)
+
+        el_thresh = DEG_2_RAD * torch.tensor(EL_THRESH, dtype=torch.float, device=device)
+
+        return {
+            "el_bins": el_bins,
+            "el_thresh": el_thresh,
+            "az_bins": az_bins,
+            "az_thresh": az_thresh,
+        }
     else:
         print("unsupported sensor model type {}".format(sensor_config["type"]))
         exit(1)
-
 
     #debug viz code
     """
@@ -129,17 +166,44 @@ def setup_sensor_model(sensor_config, device='cpu'):
 
     origin = o3d.geometry.TriangleMesh.create_coordinate_frame(origin=pos.cpu().numpy())
     o3d.visualization.draw_geometries([pc_passthrough, pc_hits, origin])
-
-    self.voxel_grid.indices = self.voxel_grid.indices[~passthrough_mask]
-    self.voxel_grid.all_indices = self.voxel_grid.all_indices[~passthrough_mask]
-    self.voxel_grid.features = self.voxel_grid.features[~passthrough_mask]
     """
 
-def get_el_az_range_from_xyz(pos, pts):
+def htm_from_quat(q):
+    """
+    Args:
+        quaternion as [x,y,z,w]
+
+    the math (https://stackoverflow.com/questions/1556260/convert-quaternion-rotation-to-rotation-matrix):
+    1.0f - 2.0f*qy*qy - 2.0f*qz*qz, 2.0f*qx*qy - 2.0f*qz*qw, 2.0f*qx*qz + 2.0f*qy*qw, 0.0f,
+    2.0f*qx*qy + 2.0f*qz*qw, 1.0f - 2.0f*qx*qx - 2.0f*qz*qz, 2.0f*qy*qz - 2.0f*qx*qw, 0.0f,
+    2.0f*qx*qz - 2.0f*qy*qw, 2.0f*qy*qz + 2.0f*qx*qw, 1.0f - 2.0f*qx*qx - 2.0f*qy*qy, 0.0f,
+    0.0f, 0.0f, 0.0f, 1.0f);
+    """
+    qdims = q.shape[:-1]
+    qx, qy, qz, qw = q.moveaxis(-1, 0)
+
+    return torch.stack([
+        1. - 2.*qy*qy - 2.*qz*qz, 2.*qx*qy - 2.*qz*qw, 2.*qx*qz + 2.*qy*qw, torch.zeros_like(qx),
+        2.*qx*qy + 2.*qz*qw, 1. - 2.*qx*qx - 2.*qz*qz, 2.*qy*qz - 2.*qx*qw, torch.zeros_like(qx),
+        2.*qx*qz - 2.*qy*qw, 2.*qy*qz + 2.*qx*qw, 1. - 2.*qx*qx - 2.*qy*qy, torch.zeros_like(qx),
+        torch.zeros_like(qx), torch.zeros_like(qx), torch.zeros_like(qx), torch.ones_like(qx)
+    ], dim=-1).view(*qdims, 4, 4)
+
+def get_el_az_range_from_xyz(pose, pts, apply_rotation=True):
     """
     Compute elevation, azimuth and range to a given position for all points
+
+    Args:
+        pos: [p;q] Tensor of the local pose of the robot
+        pts: [Nx3] Tensor of points to compute (expected to be in same frame as pos base frame)
+        apply_rotation: If true, compute el/az relative to the orientation in pose, else global
     """
-    pts_to_pos_dx = pts - pos.view(-1, 3)
+    pts_to_pos_dx = pts - pose[:3].view(-1, 3)
+
+    if apply_rotation:
+        R = htm_from_quat(pose[3:7])
+        #pts are in global, so apply inverse of R to transform to local
+        pts_to_pos_dx = transform_points(pts_to_pos_dx, torch.linalg.inv(R))
 
     ranges = torch.linalg.norm(pts_to_pos_dx, dim=-1)
     ranges_2d = torch.linalg.norm(pts_to_pos_dx[..., :2], dim=-1)
@@ -148,12 +212,19 @@ def get_el_az_range_from_xyz(pos, pts):
 
     return torch.stack([el, az, ranges], dim=-1)
 
-def get_xyz_from_el_az_range(pos, el_az_range):
+def get_xyz_from_el_az_range(pose, el_az_range, apply_rotation=True):
     x = el_az_range[:, 2] * el_az_range[:, 1].cos() * el_az_range[:, 0].cos()
     y = el_az_range[:, 2] * el_az_range[:, 1].sin() * el_az_range[:, 0].cos()
     z = el_az_range[:, 2] * el_az_range[:, 0].sin()
 
-    return torch.stack([x, y, z], dim=-1) + pos.view(1, 3)
+    pts = torch.stack([x, y, z], dim=-1)
+
+    if apply_rotation:
+        #assumed that pts in local, so rotate by pose to get global
+        R = htm_from_quat(pose[3:7])
+        pts = transform_points(pts, R)
+
+    return pts + pose[:3].view(1, 3)
 
 def bin_el_az_range(el_az_range, sensor_model, reduce='max'):
     """

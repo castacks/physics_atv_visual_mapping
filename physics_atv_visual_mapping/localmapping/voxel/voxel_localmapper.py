@@ -119,7 +119,7 @@ class VoxelLocalMapper(LocalMapper):
 
         cull_mask = passthrough_rate > 0.75
 
-        print('culling {} voxels...'.format(cull_mask.sum()))
+        # print('culling {} voxels...'.format(cull_mask.sum()))
 
         import open3d as o3d
 

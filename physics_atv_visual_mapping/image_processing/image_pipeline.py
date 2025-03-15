@@ -12,8 +12,6 @@ from physics_atv_visual_mapping.image_processing.processing_blocks.vlad import V
 from physics_atv_visual_mapping.image_processing.processing_blocks.pca_vlad import (
     PCAVLADBlock,
 )
-from physics_atv_visual_mapping.image_processing.processing_blocks.thermal import ThermalBlock
-
 # from physics_atv_visual_mapping.image_processing.processing_blocks.ganav import GANavBlock
 
 from physics_atv_visual_mapping.utils import normalize_dino
@@ -43,9 +41,6 @@ def setup_image_pipeline(config):
             )
         # elif btype == 'ganav':
         #     block = GANavBlock(**block_config['args'])
-        elif btype == "thermal":
-            block = ThermalBlock(**block_config["args"])
-            return block #Do not want to override by imagepipeline.run
         else:
             print("Unsupported visual block type {}".format(btype))
             exit(1)

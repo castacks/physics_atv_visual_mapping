@@ -121,9 +121,8 @@ class VoxelLocalMapper(LocalMapper):
 
         # print('culling {} voxels...'.format(cull_mask.sum()))
 
-        import open3d as o3d
-
         if debug:
+            import open3d as o3d
             pts = self.voxel_grid.grid_indices_to_pts(self.voxel_grid.raster_indices_to_grid_indices(self.voxel_grid.raster_indices))
             #solid=black, porous=green, cull=red
             colors = torch.stack([torch.zeros_like(passthrough_rate), passthrough_rate, torch.zeros_like(passthrough_rate)], dim=-1)

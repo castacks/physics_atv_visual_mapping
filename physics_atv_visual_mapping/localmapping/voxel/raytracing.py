@@ -22,22 +22,21 @@ class FrustumRaytracer:
         self.sensor_model = setup_sensor_model(config["sensor"], device=device)
         self.device = device
 
-    def raytrace(self, pose, voxel_grid_meas, voxel_grid_agg):
+    # def raytrace(self, pose, voxel_grid_meas, voxel_grid_agg):
+    def raytrace_but_better(self, pose, pc_meas, voxel_grid_agg):
         """
         Actual raytracing interface
 
         TODO: we're raycasting in global but the sensor is in local. Rotate the bins into local using pose
         """
-        voxel_pts = voxel_grid_meas.grid_indices_to_pts(voxel_grid_meas.raster_indices_to_grid_indices(voxel_grid_meas.raster_indices))
+        # voxel_pts = voxel_grid_meas.grid_indices_to_pts(voxel_grid_meas.raster_indices_to_grid_indices(voxel_grid_meas.raster_indices))
+
+        # import pdb;pdb.set_trace()
+        voxel_pts = pc_meas.pts
         voxel_el_az_range = get_el_az_range_from_xyz(pose, voxel_pts)
         voxel_maxdist_el_az_bins = bin_el_az_range(voxel_el_az_range, sensor_model=self.sensor_model, reduce='max')
 
         voxel_from_el_az = get_xyz_from_el_az_range(pose, voxel_el_az_range)
-
-        el_az = torch.stack(torch.meshgrid(self.sensor_model["el_bins"][:-1], self.sensor_model["az_bins"][:-1], indexing='ij'), dim=-1)
-        voxel_maxdist_sph = torch.cat([el_az.view(-1, 2), voxel_maxdist_el_az_bins.view(-1, 1)], dim=-1)
-        voxel_maxdist_sph = voxel_maxdist_sph[voxel_maxdist_sph[:, 2] > 1e-6]
-        voxel_maxdist_xyz = get_xyz_from_el_az_range(pose, voxel_maxdist_sph)
 
         agg_voxel_pts = voxel_grid_agg.grid_indices_to_pts(voxel_grid_agg.raster_indices_to_grid_indices(voxel_grid_agg.raster_indices))
         agg_voxel_el_az_range = get_el_az_range_from_xyz(pose, agg_voxel_pts)
@@ -47,10 +46,19 @@ class FrustumRaytracer:
         agg_voxel_valid_bin = (agg_voxel_bin_idxs >= 0)
 
         #set to large negative to not filter on misses
-        voxel_maxdist_el_az_bins[voxel_maxdist_el_az_bins < 1e-6] = -1e10
+        # voxel_maxdist_el_az_bins[voxel_maxdist_el_az_bins < 1e-6] = -1e10
 
         #set to lidar range to filter on misses
-        # voxel_maxdist_el_az_bins[voxel_maxdist_el_az_bins < 1e-6] = 200.
+        voxel_maxdist_el_az_bins[voxel_maxdist_el_az_bins < 1e-6] = 200.
+
+        el_az = torch.stack(torch.meshgrid(self.sensor_model["el_bins"][:-1], self.sensor_model["az_bins"][:-1], indexing='ij'), dim=-1)
+        voxel_maxdist_sph = torch.cat([el_az.view(-1, 2), voxel_maxdist_el_az_bins.view(-1, 1)], dim=-1)
+        voxel_maxdist_sph_hits = voxel_maxdist_sph[voxel_maxdist_sph[:, 2] > 1e-6]
+        voxel_maxdist_xyz_hits = get_xyz_from_el_az_range(pose, voxel_maxdist_sph_hits)
+
+        voxel_maxdist_sph_misses = voxel_maxdist_sph[voxel_maxdist_sph[:, 2] < 1e-6]
+        voxel_maxdist_sph_misses[:, 2] = 50.
+        voxel_maxdist_xyz_misses = get_xyz_from_el_az_range(pose, voxel_maxdist_sph_misses)
 
         agg_ranges = agg_voxel_el_az_range[:, 2]
         query_ranges = voxel_maxdist_el_az_bins[agg_voxel_bin_idxs]
@@ -66,15 +74,16 @@ class FrustumRaytracer:
         # plt.show()
 
         # import open3d as o3d
-        # pc_passthrough = o3d.geometry.PointCloud()
-        # pc_passthrough.points = o3d.utility.Vector3dVector(agg_voxel_pts[passthrough_mask].cpu().numpy())
         
         # pc_hits = o3d.geometry.PointCloud()
-        # pc_hits.points = o3d.utility.Vector3dVector(voxel_maxdist_xyz.cpu().numpy())
-        # pc_hits.paint_uniform_color([1., 0., 0.])
+        # pc_hits.points = o3d.utility.Vector3dVector(voxel_maxdist_xyz_hits.cpu().numpy())
 
-        # origin = o3d.geometry.TriangleMesh.create_coordinate_frame(origin=pos.cpu().numpy())
-        # o3d.visualization.draw_geometries([pc_passthrough, pc_hits, origin])
+        # pc_misses = o3d.geometry.PointCloud()
+        # pc_misses.points = o3d.utility.Vector3dVector(voxel_maxdist_xyz_misses.cpu().numpy())
+        # pc_misses.paint_uniform_color([1., 0., 0.])
+
+        # origin = o3d.geometry.TriangleMesh.create_coordinate_frame(origin=pose[:3].cpu().numpy())
+        # o3d.visualization.draw_geometries([pc_hits, pc_misses, origin])
 
         return
 
@@ -111,10 +120,34 @@ def setup_sensor_model(sensor_config, device='cpu'):
 
     elif sensor_config["type"] == "VLP32C":
         #from the spec sheet @ 600RPM (https://icave2.cse.buffalo.edu/resources/sensor-modeling/VLP32CManual.pdf)
-        az_bins = DEG_2_RAD * torch.linspace(-180., 180., 1801, dtype=torch.float, device=device)
+        az_bins = DEG_2_RAD * torch.linspace(-180., 180., 901, dtype=torch.float, device=device)
         az_thresh = (az_bins[1:] - az_bins[:-1]).min()
 
-        # EL_THRESH = 0.333 #min elev. diff bet. beams
+        EL_THRESH = 0.333 #min elev. diff bet. beams
+        EL_THRESH = 0.5 #min elev. diff bet. beams (+ some slop)
+
+        #implement elevation from spec sheet. subtract off half of thresh to get lower bin edges (and copy top bin edge)
+        el_bins = DEG_2_RAD * (torch.tensor([
+         -25.000, -15.6390, -11.3100,  -8.8430,  -7.2540,  -6.1480,  -5.3330,
+         -4.6670,  -4.0000,  -3.6670,  -3.3330,  -3.0000,  -2.6670,  -2.3330,
+         -2.0000,  -1.6670,  -1.0000,  -0.6670,  -0.3330,   0.0000,   0.3330,
+          0.6670,   1.0000,   1.3330,   1.6670,   2.3330,   3.0000,   3.3330,
+          4.6670,   7.0000,  10.3330,  15.0000, 15.+EL_THRESH], dtype=torch.float, device=device) - 0.5*EL_THRESH)
+
+        el_thresh = DEG_2_RAD * torch.tensor(EL_THRESH, dtype=torch.float, device=device)
+
+        return {
+            "el_bins": el_bins,
+            "el_thresh": el_thresh,
+            "az_bins": az_bins,
+            "az_thresh": az_thresh,
+        }
+    elif sensor_config["type"] == "VLP32C-front":
+        #from the spec sheet @ 600RPM (https://icave2.cse.buffalo.edu/resources/sensor-modeling/VLP32CManual.pdf)
+        az_bins = DEG_2_RAD * torch.linspace(-90., 90., 451, dtype=torch.float, device=device)
+        az_thresh = (az_bins[1:] - az_bins[:-1]).min()
+
+        EL_THRESH = 0.333 #min elev. diff bet. beams
         EL_THRESH = 0.5 #min elev. diff bet. beams (+ some slop)
 
         #implement elevation from spec sheet. subtract off half of thresh to get lower bin edges (and copy top bin edge)

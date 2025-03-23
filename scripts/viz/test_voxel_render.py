@@ -8,6 +8,8 @@ import torch
 import numpy as np
 import matplotlib.pyplot as plt
 
+from scipy.spatial.transform import Rotation as R
+
 from ros_torch_converter.datatypes.pointcloud import FeaturePointCloudTorch
 
 from tartandriver_utils.geometry_utils import TrajectoryInterpolator
@@ -24,11 +26,123 @@ from physics_atv_visual_mapping.localmapping.voxel.voxel_localmapper import (
 )
 from physics_atv_visual_mapping.localmapping.metadata import LocalMapperMetadata
 
-from physics_atv_visual_mapping.terrain_estimation.terrain_estimation_pipeline import setup_terrain_estimation_pipeline
+from physics_atv_visual_mapping.localmapping.voxel.raytracing import *
 
 """
 Run the dino mapping offline on the kitti-formatted dataset
 """
+
+def get_render_path(pose):
+    """
+    Generate a render path from pose
+
+    For now I'm doing a linear az sweep + sinusoidal el
+    """
+    d_az = torch.linspace(0., 2*np.pi, 100)
+    d_el = torch.linspace(0., 4*np.pi, 100).sin() * (np.pi/6)
+
+    d_eul = torch.stack([torch.zeros_like(d_az), d_el, d_az], dim=-1)
+    render_path = []
+
+    for i, eul in enumerate(d_eul):
+        dR = R.from_euler(angles=eul.cpu().numpy(), seq='xyz').as_matrix()
+        dR = torch.tensor(dR, dtype=torch.float, device=pose.device)
+        dH = torch.eye(4, device=pose.device)
+        dH[:3, :3] = dR
+        render_path.append(pose @ dH)
+
+    """
+    # debug
+    import open3d as o3d
+    axs = []
+    for pose in render_path:
+        ax = o3d.geometry.TriangleMesh.create_coordinate_frame()
+        ax.transform(pose.cpu().numpy())
+        axs.append(ax)
+
+    o3d.visualization.draw_geometries(axs)
+    """
+    render_path_quat = []
+
+    for H in render_path:
+        p = H[:3, -1]
+        rot = H[:3, :3]
+        q = torch.tensor(R.from_matrix(rot.cpu().numpy()).as_quat(), dtype=torch.float, device=pose.device)
+        pq = torch.cat([p, q])
+        render_path_quat.append(pq)
+
+    render_path = torch.stack(render_path_quat, dim=0)
+
+    return render_path
+
+def render_voxel_grid(pose, voxel_grid, sensor_model):
+    """
+    render a voxel grid from a given pose
+    """
+    n_el = sensor_model['el_bins'].shape[0] - 1
+    n_az = sensor_model['az_bins'].shape[0] - 1
+
+    #turn off for now
+
+    #only work with feature voxels
+    voxel_pts = voxel_grid.grid_indices_to_pts(voxel_grid.raster_indices_to_grid_indices(voxel_grid.raster_indices[voxel_grid.feature_mask]))
+
+    voxel_el_az_range = get_el_az_range_from_xyz(pose, voxel_pts)
+    voxel_mindist_el_az_bins = bin_el_az_range(voxel_el_az_range, sensor_model=sensor_model, reduce='min')
+
+    depth_image_valid_mask = voxel_mindist_el_az_bins > 1e-6
+
+    voxel_bin_idxs = get_el_az_range_bin_idxs(voxel_el_az_range, sensor_model=sensor_model)
+    voxel_valid_bin = (voxel_bin_idxs >= 0)
+
+    voxel_pt_mindist = voxel_mindist_el_az_bins[voxel_bin_idxs]
+    voxel_is_mindist = (voxel_el_az_range[:, 2] - voxel_pt_mindist).abs() < 1e-6
+
+    feat_proj_mask = (voxel_is_mindist & voxel_valid_bin)
+
+    scatter_pts = voxel_pts[feat_proj_mask]
+    scatter_idxs = voxel_bin_idxs[feat_proj_mask]
+    feats_to_scatter = voxel_grid.features[feat_proj_mask]
+
+    #for smaller fdims it's prob ok to just copy feats
+    #note that I'm not correctly handling inter-voxel feat/depth scattering here
+    vnx = 5
+    vny = 5
+    vnz = 5
+
+    voxel_noise = torch.stack(torch.meshgrid([
+        torch.linspace(0., 1., vnx),
+        torch.linspace(0., 1., vny),
+        torch.linspace(0., 1., vnz),
+    ]), dim=-1).view(-1, 3).to(voxel_grid.device) * voxel_grid.metadata.resolution.view(1, 3)
+
+    voxel_noise_pts = (scatter_pts.unsqueeze(1) + voxel_noise.unsqueeze(0)).view(-1, 3)
+    voxel_noise_features = feats_to_scatter.unsqueeze(1).tile(1, vnx*vny*vnz, 1).view(-1, feats_to_scatter.shape[-1])
+
+    voxel_noise_el_az_range = get_el_az_range_from_xyz(pose, voxel_noise_pts)
+    voxel_noise_bin_idxs = get_el_az_range_bin_idxs(voxel_noise_el_az_range, sensor_model=sensor_model)
+    voxel_noise_mindist_el_az_bins = bin_el_az_range(voxel_noise_el_az_range, sensor_model=sensor_model, reduce='min')
+    
+    img_el_idxs = (voxel_noise_bin_idxs / n_az).long()
+    img_az_idxs = voxel_noise_bin_idxs % n_az
+
+    #conveniently, scatter_idxs are guaranteed to be unique
+    _, (fmin, fmax) = normalize_dino(voxel_grid.features, return_min_max = True)
+    feat_img = torch.zeros(n_el, n_az, 3, device=voxel_grid.device)
+
+    viz_feats = (voxel_noise_features[:, :3] - fmin.view(1, 3)) / (fmax-fmin).view(1, 3)
+    viz_feats = viz_feats.clamp(0., 1.)
+
+    feat_img[img_el_idxs, img_az_idxs] = viz_feats
+
+    depth_img = voxel_noise_mindist_el_az_bins.reshape(n_el, n_az)
+
+    return feat_img, depth_img
+
+    # fig, axs = plt.subplots(1, 2)
+    # axs[0].imshow(depth_img.cpu().numpy(), vmin=0., cmap='jet', origin='lower')
+    # axs[1].imshow(feat_img.cpu().numpy(), origin='lower')
+    # plt.show()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -88,11 +202,6 @@ if __name__ == "__main__":
         device=config["device"],
     )
 
-    # setup terrain estimation
-    do_terrain_estimation = 'terrain_estimation' in config.keys()
-    if do_terrain_estimation:
-        terrain_estimator = setup_terrain_estimation_pipeline(config)
-
     ## first create the trajectory interpolator
     odom_dir = os.path.join(args.run_dir, args.odom)
     poses = np.loadtxt(os.path.join(odom_dir, "data.txt"))
@@ -132,12 +241,29 @@ if __name__ == "__main__":
         )
     )
 
+    render_sensor_model_config = {
+        "type": "generic",
+        "az_range": [-45., 45.],
+        "n_az": 300,
+        "az_thresh": "default",
+        "el_range": [-30., 30.],
+        "n_el": 200,
+        "el_thresh": "default",
+    }
+    render_sensor_model = setup_sensor_model(render_sensor_model_config, device=config["device"])
+
+    fig, axs = plt.subplots(1, 2)
+    axs[0].set_title("Depth Image")
+    axs[1].set_title("Feature Image")
+    plt.show(block=False)
+
     for ii in tqdm.tqdm(range(len(image_ts))):
         pcl_fp = os.path.join(args.run_dir, args.pcl, "{:08d}.npy".format(pcl_idxs[ii]))
         image_fp = os.path.join(args.run_dir, args.image, "{:08d}.png".format(ii))
         img_t = image_ts[ii]
 
         pose = traj_interp(img_t)
+        pose_pq = torch.tensor(pose, dtype=torch.float, device=config["device"])
         pose = pose_to_htm(pose).to(config["device"])
 
         pcl = torch.from_numpy(np.load(pcl_fp)).float().to(config["device"])
@@ -177,23 +303,31 @@ if __name__ == "__main__":
         feature_pcl = FeaturePointCloudTorch.from_torch(pts=pcl, features=feature_features, mask=mask)
 
         localmapper.update_pose(pose[:3, -1])
-        localmapper.add_feature_pc(pos=pose[:3, -1], feat_pc=feature_pcl, do_raytrace=False)
+        localmapper.add_feature_pc(pos=pose[:3, -1], feat_pc=feature_pcl, do_raytrace=True)
 
-        if do_terrain_estimation:
-            bev_features = terrain_estimator.run(localmapper.voxel_grid)
-            torch.cuda.synchronize()
-   
-        if (ii+1) % 50 == 0:
-            # localmapper.bev_grid.visualize();plt.show()
-            localmapper.voxel_grid.visualize()
+        feat_img, depth_img = render_voxel_grid(pose_pq, localmapper.voxel_grid, render_sensor_model)
 
-            fig, axs = plt.subplots(4, 4, figsize=(16, 16))
-            axs = axs.flatten()
-            for i in range(min(len(axs), len(bev_features.feature_keys))):
-                k = bev_features.feature_keys[i]
-                data = bev_features.data[..., i]
-                axs[i].imshow(data.T.cpu().numpy(), origin='lower', cmap='jet', interpolation='none')
-                axs[i].set_title(k)
+        for ax in axs:
+            ax.cla()
 
-            fig.suptitle('showing 16 of {} features'.format(len(bev_features.feature_keys)))
-            plt.show()
+        axs[0].set_title("Depth Image")
+        axs[1].set_title("Feature Image")
+        axs[0].imshow(depth_img.cpu().numpy(), vmin=0., cmap='jet', origin='lower')
+        axs[1].imshow(feat_img.cpu().numpy(), origin='lower')
+        plt.pause(0.1)
+
+        #try spinning (it's a neat trick)
+        if (ii+1) % 100 == 0 and ii >= 99:
+            render_path = get_render_path(pose)
+
+            for render_pose in render_path:
+                feat_img, depth_img = render_voxel_grid(render_pose, localmapper.voxel_grid, render_sensor_model)
+
+                for ax in axs:
+                    ax.cla()
+
+                axs[0].set_title("Depth Image")
+                axs[1].set_title("Feature Image")
+                axs[0].imshow(depth_img.cpu().numpy(), vmin=0., cmap='jet', origin='lower')
+                axs[1].imshow(feat_img.cpu().numpy(), origin='lower')
+                plt.pause(0.05)

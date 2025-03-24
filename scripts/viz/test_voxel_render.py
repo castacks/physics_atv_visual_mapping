@@ -137,7 +137,9 @@ def render_voxel_grid(pose, voxel_grid, sensor_model):
 
     depth_img = voxel_noise_mindist_el_az_bins.reshape(n_el, n_az)
 
-    return feat_img, depth_img
+    #TODO we're y-flipped for some reason
+
+    return feat_img.flip(1), depth_img.flip(1)
 
     # fig, axs = plt.subplots(1, 2)
     # axs[0].imshow(depth_img.cpu().numpy(), vmin=0., cmap='jet', origin='lower')
@@ -252,9 +254,10 @@ if __name__ == "__main__":
     }
     render_sensor_model = setup_sensor_model(render_sensor_model_config, device=config["device"])
 
-    fig, axs = plt.subplots(1, 2)
-    axs[0].set_title("Depth Image")
-    axs[1].set_title("Feature Image")
+    fig, axs = plt.subplots(1, 3)
+    axs[0].set_title("FPV")
+    axs[1].set_title("Depth Image")
+    axs[2].set_title("Feature Image")
     plt.show(block=False)
 
     for ii in tqdm.tqdm(range(len(image_ts))):
@@ -267,9 +270,9 @@ if __name__ == "__main__":
         pose = pose_to_htm(pose).to(config["device"])
 
         pcl = torch.from_numpy(np.load(pcl_fp)).float().to(config["device"])
-        img = cv2.imread(image_fp)
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB) / 255.0
-        img = torch.tensor(img).unsqueeze(0).permute(0, 3, 1, 2)
+        img_inp = cv2.imread(image_fp)
+        img_inp = cv2.cvtColor(img_inp, cv2.COLOR_BGR2RGB) / 255.0
+        img = torch.tensor(img_inp).unsqueeze(0).permute(0, 3, 1, 2)
 
         feature_img, feature_intrinsics = image_pipeline.run(
             img, intrinsics.unsqueeze(0)
@@ -310,24 +313,28 @@ if __name__ == "__main__":
         for ax in axs:
             ax.cla()
 
-        axs[0].set_title("Depth Image")
-        axs[1].set_title("Feature Image")
-        axs[0].imshow(depth_img.cpu().numpy(), vmin=0., cmap='jet', origin='lower')
-        axs[1].imshow(feat_img.cpu().numpy(), origin='lower')
+        axs[0].set_title("FPV")
+        axs[1].set_title("Depth Image")
+        axs[2].set_title("Feature Image")
+        axs[0].imshow(img_inp)
+        axs[1].imshow(depth_img.cpu().numpy(), vmin=0., cmap='jet', origin='lower')
+        axs[2].imshow(feat_img.cpu().numpy(), origin='lower')
         plt.pause(0.1)
 
-        #try spinning (it's a neat trick)
         if (ii+1) % 100 == 0 and ii >= 99:
             render_path = get_render_path(pose)
 
+            #try spinning (it's a neat trick)
             for render_pose in render_path:
                 feat_img, depth_img = render_voxel_grid(render_pose, localmapper.voxel_grid, render_sensor_model)
 
                 for ax in axs:
                     ax.cla()
 
+                axs[0].set_title("FPV")
                 axs[0].set_title("Depth Image")
                 axs[1].set_title("Feature Image")
-                axs[0].imshow(depth_img.cpu().numpy(), vmin=0., cmap='jet', origin='lower')
-                axs[1].imshow(feat_img.cpu().numpy(), origin='lower')
+                axs[0].imshow(img_inp)
+                axs[1].imshow(depth_img.cpu().numpy(), vmin=0., cmap='jet', origin='lower')
+                axs[2].imshow(feat_img.cpu().numpy(), origin='lower')
                 plt.pause(0.05)

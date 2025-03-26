@@ -1,4 +1,4 @@
-# models_dir: /home/tartandriver/tartandriver_ws/models #necessary to include this for non-ROS offline proc
+models_dir: /home/tartandriver/tartandriver_ws/models #necessary to include this for non-ROS offline proc
 
 image:
     image_topic: /multisense/left/image_rect_color
@@ -6,16 +6,16 @@ image:
     image_compressed: False
 
 pointcloud:
-   topic: /slam/registered_scan
+   topic: /superodometry/velodyne_cloud_registered
 
 odometry:
-    topic: /slam/integrated_to_init
+    topic: /superodometry/integrated_to_init
 
 gridmap:
     topic: local_gridmap
 
 #the base link of the vehicle (e.g. base_link, vehicle, etc.)
-vehicle_frame: sensor 
+vehicle_frame: vehicle 
 
 # #camera intrinsics
 # intrinsics:
@@ -47,9 +47,9 @@ localmapping:
     ema: 0.5 #higher->use recent more
     n_features: 16
     metadata:
-        origin: [-10., -10., -1.5]
-        length: [20., 20., 3.]
-        resolution: [0.1, 0.1, 0.1]
+        origin: [-30., -30., -15.]
+        length: [60., 60., 30.]
+        resolution: [0.2, 0.2, 0.2]
 
 terrain_estimation:
     -
@@ -66,7 +66,7 @@ terrain_estimation:
             height_high_thresh: 0.5 #cells this far above their neighbors are not terrain
 
             kernel_params:
-                kernel_radius: 1. #kernel radius in m
+                kernel_radius: 2. #kernel radius in m
                 kernel_type: gaussian #one of {gaussian/box} the kernel type to use for inflation
                 kernel_sharpness: 5. #sharpness of (Gaussian) kernel
 
@@ -77,7 +77,7 @@ terrain_estimation:
             mask_layer: min_elevation_filtered_mask
 
             kernel_params:
-                kernel_radius: 1. #kernel radius in m
+                kernel_radius: 5. #kernel radius in m
                 kernel_type: gaussian #one of {gaussian/box} the kernel type to use for inflation
                 kernel_sharpness: 10. #sharpness of (Gaussian) kernel
 

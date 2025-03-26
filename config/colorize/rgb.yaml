@@ -1,0 +1,38 @@
+models_dir: /home/tartandriver/tartandriver_ws/models
+
+image:
+    folder: image_left_color
+
+pointcloud:
+    folder: pcl
+
+odometry:
+    folder: odom
+
+# image_processing:
+
+localmapping:
+    mapper_type: voxel
+    layer_key: dino
+    ema: 0.5 #higher->use recent more
+    n_features: 3
+    metadata:
+        origin: [-60., -60., -30.]
+        length: [120., 120., 60.]
+        resolution: [0.4, 0.4, 0.4]
+
+pca_nfeats: 64 #reduce output feats to this dim
+#pca_nfeats: 128 #reduce output feats to this dim
+
+pcl_mindist: 3.0
+pcl_maxdist: 50.0
+
+extrinsics:
+    p: [0.17265, -0.15227, 0.05708]
+    q: [0.55940, -0.54718, 0.44603, 0.43442] #xyzw
+
+#this is for the original image size (we will auto-adjust to reflect image_insize)
+intrinsics:
+    K: [477.6049499511719, 0.0, 499.5,  0.0, 477.6049499511719, 252.0,  0.0, 0.0, 1.0]
+
+device: cuda

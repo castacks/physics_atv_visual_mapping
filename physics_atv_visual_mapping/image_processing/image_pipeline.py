@@ -4,7 +4,6 @@ import numpy as np
 from physics_atv_visual_mapping.image_processing.processing_blocks.dino import (
     Dinov2Block,
 )
-from physics_atv_visual_mapping.image_processing.processing_blocks.sam import SAMBlock
 from physics_atv_visual_mapping.image_processing.processing_blocks.radio import (
     RadioBlock,
 )
@@ -13,7 +12,6 @@ from physics_atv_visual_mapping.image_processing.processing_blocks.vlad import V
 from physics_atv_visual_mapping.image_processing.processing_blocks.pca_vlad import (
     PCAVLADBlock,
 )
-
 # from physics_atv_visual_mapping.image_processing.processing_blocks.ganav import GANavBlock
 
 from physics_atv_visual_mapping.utils import normalize_dino

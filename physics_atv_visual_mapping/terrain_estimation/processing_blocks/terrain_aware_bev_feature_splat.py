@@ -29,7 +29,7 @@ class TerrainAwareBEVFeatureSplat(TerrainEstimationBlock):
         mask_idx = bev_grid.feature_keys.index(self.terrain_mask_layer)
         terrain_mask = bev_grid.data[..., mask_idx] > 1e-4
 
-        voxel_grid_idxs = voxel_grid.raster_indices_to_grid_indices(voxel_grid.indices)
+        voxel_grid_idxs = voxel_grid.raster_indices_to_grid_indices(voxel_grid.feature_raster_indices)
         voxel_grid_pts = voxel_grid.grid_indices_to_pts(voxel_grid_idxs, centers=True)
 
         voxel_terrain_height = terrain_data[voxel_grid_idxs[:, 0], voxel_grid_idxs[:, 1]]

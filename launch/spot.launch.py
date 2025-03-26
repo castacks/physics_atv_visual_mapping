@@ -14,7 +14,7 @@ def generate_launch_description():
     # Use PathJoinSubstitution to dynamically join the package path and the config file
     config_fp = PathJoinSubstitution(
         [
-            FindPackageShare("physics_atv_visual_mapping"),
+            FindPackageShare("spot"),
             "config",
             "ros",
             visual_mapping_config,
@@ -25,7 +25,7 @@ def generate_launch_description():
         # Declare the use_sim_time argument
         DeclareLaunchArgument(
             "use_sim_time",
-            default_value="false",
+            default_value="true",
             description="Use simulation (Gazebo) clock if true",
         ),
         # Declare the launch argument with a default value

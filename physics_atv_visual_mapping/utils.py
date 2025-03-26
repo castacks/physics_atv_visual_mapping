@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+from numpy import pi as PI
 
 np.float = np.float64  # hack for numpify
 import ros2_numpy
@@ -10,6 +11,8 @@ from scipy.spatial.transform import Rotation
 collection of common geometry operations on poses, points, etc
 """
 
+DEG_2_RAD = PI/180.
+RAD_2_DEG = 180./PI
 
 def normalize_dino(img, return_min_max=False):
     _img = img[..., :3]

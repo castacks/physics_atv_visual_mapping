@@ -6,7 +6,7 @@ import torch
 import numpy as np
 import argparse
 import matplotlib.pyplot as plt
-
+from termcolor import colored
 
 from tartandriver_utils.geometry_utils import TrajectoryInterpolator
 
@@ -14,11 +14,11 @@ from physics_atv_visual_mapping.image_processing.image_pipeline import (
     setup_image_pipeline,
 )
 from physics_atv_visual_mapping.pointcloud_colorization.torch_color_pcl_utils import *
-from physics_atv_visual_mapping.utils import pose_to_htm
+from physics_atv_visual_mapping.utils import pose_to_htm, transform_points
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=str, required=True, help="path to config")
+    parser.add_argument('--config', type=str, required=True, help='path to local mapping config')
     parser.add_argument(
         "--data_dir",
         type=str,
@@ -28,6 +28,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "--save_to", type=str, required=True, help="path to save PCA to"
     )
+    parser.add_argument('--pc_in_local', action='store_true', help='set this flag if the pc is in the sensor frame, otherwise assume in odom frame')
+    parser.add_argument('--pc_lim', type=float, nargs=2, required=False, default=[5., 100.], help='limit on range (m) of pts to consider')
+    parser.add_argument('--pca_nfeats', type=int, required=False, default=64, help='number of pca feats to use')
+    parser.add_argument('--n_frames', type=int, required=False, default=3000, help='process this many frames for the pca')
     args = parser.parse_args()
 
     config = yaml.safe_load(open(args.config, "r"))
@@ -46,22 +50,41 @@ if __name__ == "__main__":
     intrinsics = get_intrinsics(torch.tensor(config["intrinsics"]["K"]).reshape(3, 3))
     # dont combine because we need to recalculate given dino
 
+    #if config already has a pca, remove it.
+    image_processing_config = []
+    for ip_block in config['image_processing']:
+        if ip_block['type'] == 'pca':
+            print(colored('WARNING: found an existing PCA block in the image processing config. removing...', 'yellow'))
+            break
+        image_processing_config.append(ip_block)
+
+    config['image_processing'] = image_processing_config
+
     pipeline = setup_image_pipeline(config)
 
     dino_buf = []
 
     # check to see if single run or dir of runs
     run_dirs = []
-    if config["odometry"]["folder"] in os.listdir(args.data_dir):
+    if config['odometry']['folder'] in os.listdir(args.data_dir):
         run_dirs = [args.data_dir]
     else:
         run_dirs = [os.path.join(args.data_dir, x) for x in os.listdir(args.data_dir)]
 
-    print("computing for {} run dirs".format(len(run_dirs)))
+    N_samples = 0
+    for ddir in run_dirs:
+        odom_dir = os.path.join(ddir, config["odometry"]["folder"])
+        poses = np.loadtxt(os.path.join(odom_dir, "data.txt"))
+        N_samples += poses.shape[0]
+
+    n_frames = min(args.n_frames, N_samples)
+    proc_every = int(N_samples / n_frames)
+
+    print("computing for {} run dirs ({} samples, proc every {}th frame.)".format(len(run_dirs), N_samples, proc_every))
 
     for ddir in tqdm.tqdm(run_dirs):
         odom_dir = os.path.join(ddir, config["odometry"]["folder"])
-        poses = np.load(os.path.join(odom_dir, "odometry.npy"))
+        poses = np.loadtxt(os.path.join(odom_dir, "data.txt"))
         pose_ts = np.loadtxt(os.path.join(odom_dir, "timestamps.txt"))
         mask = np.abs(pose_ts[1:] - pose_ts[:-1]) > 1e-4
         poses = poses[1:][mask]
@@ -87,20 +110,26 @@ if __name__ == "__main__":
         print("found {} valid pcl-image pairs".format(pcl_valid_mask.sum()))
 
         for pcl_idx in tqdm.tqdm(pcl_valid_idxs):
-            if pcl_idx % 10 == 0:
-                pcl_fp = os.path.join(pcl_dir, "{:06d}.npy".format(pcl_idx))
+            if pcl_idx % proc_every == 0:
+                pcl_fp = os.path.join(pcl_dir, "{:08d}.npy".format(pcl_idx))
+                pcl_t = pcl_ts[pcl_idx]
                 pcl = torch.from_numpy(np.load(pcl_fp)).to(config["device"]).float()
 
+                if not args.pc_in_local:
+                    pose = traj_interp(pcl_t)
+                    H = pose_to_htm(pose).to(config["device"]).float()
+                    pcl = transform_points(pcl, torch.linalg.inv(H))
+
                 pcl_dists = torch.linalg.norm(pcl[:, :3], dim=-1)
-                pcl_mask = (pcl_dists > config["pcl_mindist"]) & (
-                    pcl_dists < config["pcl_maxdist"]
+                pcl_mask = (pcl_dists > args.pc_lim[0]) & (
+                    pcl_dists < args.pc_lim[1]
                 )
                 pcl = pcl[pcl_mask]
 
                 pcl = pcl[:, :3]  # assume first three are [x,y,z]
 
                 img_idx = pcl_img_argmin[pcl_idx]
-                img_fp = os.path.join(img_dir, "{:06d}.png".format(img_idx))
+                img_fp = os.path.join(img_dir, "{:08d}.png".format(img_idx))
                 img = cv2.imread(img_fp)
                 img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB) / 255.0
                 img = torch.tensor(img).permute(2, 0, 1).float()
@@ -156,7 +185,7 @@ if __name__ == "__main__":
     feat_mean = dino_buf.mean(dim=0)
     dino_feats_norm = dino_buf - feat_mean.unsqueeze(0)
 
-    U, S, V = torch.pca_lowrank(dino_feats_norm, q=config["pca_nfeats"])
+    U, S, V = torch.pca_lowrank(dino_feats_norm, q=args.pca_nfeats)
 
     pca_res = {"mean": feat_mean.cpu(), "V": V.cpu()}
     torch.save(pca_res, args.save_to)
@@ -179,18 +208,18 @@ if __name__ == "__main__":
     )
     plt.bar(
         np.arange(avg_feat_norm.shape[0]),
-        avg_feat_norm,
+        np.cumsum(avg_feat_norm/avg_total_feat_norm),
         color="b",
         label="pca component norm",
     )
-    plt.bar([avg_feat_norm.shape[0]], avg_residual, color="r", label="residual norm")
+    plt.bar([avg_feat_norm.shape[0]], avg_residual / avg_total_feat_norm, color="r", label="residual norm")
     plt.legend()
     plt.show()
 
     ## viz loop ##
     for ddir in run_dirs:
         odom_dir = os.path.join(ddir, config["odometry"]["folder"])
-        poses = np.load(os.path.join(odom_dir, "odometry.npy"))
+        poses = np.loadtxt(os.path.join(odom_dir, "data.txt"))
         pose_ts = np.loadtxt(os.path.join(odom_dir, "timestamps.txt"))
         mask = np.abs(pose_ts[1:] - pose_ts[:-1]) > 1e-4
         poses = poses[1:][mask]
@@ -216,19 +245,25 @@ if __name__ == "__main__":
         print("found {} valid pcl-image pairs".format(pcl_valid_mask.sum()))
 
         for pcl_idx in pcl_valid_idxs[::100]:
-            pcl_fp = os.path.join(pcl_dir, "{:06d}.npy".format(pcl_idx))
+            pcl_fp = os.path.join(pcl_dir, "{:08d}.npy".format(pcl_idx))
             pcl = torch.from_numpy(np.load(pcl_fp)).to(config["device"]).float()
+            pcl_t = pcl_ts[pcl_idx]
+
+            if not args.pc_in_local:
+                pose = traj_interp(pcl_t)
+                H = pose_to_htm(pose).to(config["device"]).float()
+                pcl = transform_points(pcl, torch.linalg.inv(H))
 
             pcl_dists = torch.linalg.norm(pcl[:, :3], dim=-1)
-            pcl_mask = (pcl_dists > config["pcl_mindist"]) & (
-                pcl_dists < config["pcl_maxdist"]
+            pcl_mask = (pcl_dists > args.pc_lim[0]) & (
+                pcl_dists < args.pc_lim[1]
             )
             pcl = pcl[pcl_mask]
 
             pcl = pcl[:, :3]  # assume first three are [x,y,z]
 
             img_idx = pcl_img_argmin[pcl_idx]
-            img_fp = os.path.join(img_dir, "{:06d}.png".format(img_idx))
+            img_fp = os.path.join(img_dir, "{:08d}.png".format(img_idx))
             img = cv2.imread(img_fp)
             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB) / 255.0
             img = torch.tensor(img).permute(2, 0, 1)
@@ -246,7 +281,7 @@ if __name__ == "__main__":
             ) - feat_mean.view(1, -1)
             dino_feats_pca = dino_feats_norm.unsqueeze(1) @ V.unsqueeze(0)
             dino_feats = dino_feats_pca.view(
-                dino_feats.shape[0], dino_feats.shape[1], config["pca_nfeats"]
+                dino_feats.shape[0], dino_feats.shape[1], args.pca_nfeats
             )
 
             P = obtain_projection_matrix(dino_intrinsics, extrinsics).to(

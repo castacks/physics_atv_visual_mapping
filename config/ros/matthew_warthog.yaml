@@ -1,16 +1,16 @@
-models_dir: /home/tartandriver/workspace/models #necessary to include this for non-ROS offline proc
+models_dir: /phoenix/cmu_sara_perception_models #necessary to include this for non-ROS offline proc
+# models_dir: /home/tartandriver/tartandriver_ws/models
 
 image:
-    image_topic: /multisense/left/image_rect_color
-    camera_info_topic: /multisense/left/camera_info
+    image_topic: sensors/multisense_front/aux/image_rect_color/camera_info
+    camera_info_topic: sensors/multisense_front/aux/image_rect_color
     image_compressed: False
 
 pointcloud:
-    topic: /superodometry/velodyne_cloud_registered
-#    topic: /coloroze_pcl_node/colorized_pcl
+   topic: registered_scan
 
 odometry:
-    topic: /superodometry/integrated_to_init
+    topic: integrated_to_init
 
 gridmap:
     topic: local_gridmap
@@ -20,18 +20,26 @@ vehicle_frame: vehicle
 
 #camera intrinsics
 intrinsics:
-    K: [455.7750, 0., 497.1180, 0., 456.3191, 251.8580, 0., 0., 1.]
-    P: [455.7750, 0., 497.1180, 0., 456.3191, 251.8580, 0., 0., 1.]
+    K: [1064.3520, 0., 732.8348, 0., 1064.3520, 581.5662, 0., 0., 1]
+    P: [1064.3520, 0., 732.8348, 0., 1064.3520, 581.5662, 0., 0., 1]
 
 #transform from the vehicle link to the camera link
 extrinsics:
-#    p: [0.0, 0.0, -0.1274]
-#    q: [-0.549, 0.554, -0.445, -0.440] #xyzw
-
-    p: [0.0, 0.4, -0.3]
-    q: [0.569, -0.549, 0.416, 0.450] #xyzw
+    p: [0.353, 1.025, -0.627]
+    q: [-0.509, 0.512, -0.492, -0.485] #xyzw
 
 image_processing:
+    # -
+    #     type: radio
+    #     args:
+    #         radio_type: radio_v2.5-b # radio_v2 e-radio_v2
+    #         image_insize: [672, 496]  # Original Image Size must be divisible by 16
+
+    # - 
+    #     type: pca
+    #     args:
+    #         fp: physics_atv_visual_mapping/data/dino_clusters/8_clusters_364x686_
+
     -
         type: dino
         args:
@@ -39,22 +47,23 @@ image_processing:
             dino_layer: 10
             image_insize: [686, 364] #this should be the size of the input images
             desc_facet: value
-    - 
-        type: pca
+    -
+        type: vlad
         args:
-            # fp: physics_atv_visual_mapping/pca/dino_vitb_10_renegade_ridge.pt
-            fp: physics_atv_visual_mapping/pca/pca_vitb10_value.pt
+            n_clusters: 8
+            cache_dir: /phoenix/src/perception/cmu_sara_perception/physics_atv_visual_mapping/data/dino_clusters/8_clusters_364x686_            
 
 # voxel
 localmapping:
     mapper_type: voxel
-    layer_key: radio
+    layer_key: dino # dino
     ema: 0.5 #higher->use recent more
-    n_features: 3
-    metadata:
-        origin: [-60., -60., -30.]
-        length: [120., 120., 60.]
-        resolution: [0.25, 0.25, 0.25]
+    n_features: 8
+    metadata: #if too slow, can reduce length/height or slightly decrease resolution
+        origin: [-25., -25., -10.]
+        length: [50., 50., 20.]
+        resolution: [0.1999, 0.1999, 0.1999]
+
 
 terrain_estimation:
     -
@@ -71,9 +80,10 @@ terrain_estimation:
             height_high_thresh: 0.5 #cells this far above their neighbors are not terrain
 
             kernel_params:
-                kernel_radius: 2. #kernel radius in m
                 kernel_type: gaussian #one of {gaussian/box} the kernel type to use for inflation
-                kernel_sharpness: 2. #sharpness of (Gaussian) kernel
+
+                kernel_radius: 0.25 #kernel radius in m
+                kernel_sharpness: 0.5 #sharpness of (Gaussian) kernel
 
     -
         type: terrain_inflation
@@ -82,9 +92,10 @@ terrain_estimation:
             mask_layer: min_elevation_filtered_mask
 
             kernel_params:
-                kernel_radius: 5. #kernel radius in m
                 kernel_type: gaussian #one of {gaussian/box} the kernel type to use for inflation
-                kernel_sharpness: 2. #sharpness of (Gaussian) kernel
+
+                kernel_radius: 3.0 #kernel radius in m
+                kernel_sharpness: 1.0 #sharpness of (Gaussian) kernel
 
     - 
         type: mrf_terrain_estimation
@@ -92,15 +103,16 @@ terrain_estimation:
             input_layer: min_elevation_filtered_inflated
             mask_layer: min_elevation_filtered_inflated_mask
 
-            itrs: 20   #num updates
-            alpha: 4. #weight on the measurement update
+            itrs: 5   #num updates
+            alpha: 1. #weight on the measurement update
             beta: 10.  #weight on the neighbor update
-            lr: 0.01   #learning rate
+            lr: 0.05   #learning rate
 
             kernel_params:
-                kernel_radius: 1. #kernel radius in m
                 kernel_type: gaussian #one of {gaussian/box} the kernel type to use for inflation
-                kernel_sharpness: 2. #sharpness of (Gaussian) kernel
+
+                kernel_radius: 3.0
+                kernel_sharpness: 1.0
 
     - 
         type: slope
@@ -114,15 +126,14 @@ terrain_estimation:
             terrain_layer: terrain
             max_elevation_layer: max_elevation
             max_elevation_mask_layer: num_voxels
-            overhang: 2.0
+            overhang: 2.0 #done to match irl yamaha values
     -
         type: terrain_aware_bev_feature_splat
         args:
-            output_key: terrain_bev
+            output_key: dino
             terrain_layer: terrain
             terrain_mask_layer: min_elevation_filtered_inflated_mask
-            overhang: 2.0
+            overhang: 1.0
 
 device: cuda
-#viz: True
 viz: False

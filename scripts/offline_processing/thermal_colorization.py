@@ -8,8 +8,6 @@ import torch
 import numpy as np
 import matplotlib.pyplot as plt
 
-from ros_torch_converter.datatypes.pointcloud import FeaturePointCloudTorch
-
 from tartandriver_utils.geometry_utils import TrajectoryInterpolator
 
 from physics_atv_visual_mapping.image_processing.image_pipeline import (
@@ -27,7 +25,7 @@ from physics_atv_visual_mapping.localmapping.metadata import LocalMapperMetadata
 from physics_atv_visual_mapping.terrain_estimation.terrain_estimation_pipeline import setup_terrain_estimation_pipeline
 
 """
-Run the dino mapping offline on the kitti-formatted dataset
+Run thermal mapping offline on the kitti-formatted dataset
 """
 
 if __name__ == "__main__":
@@ -44,7 +42,7 @@ if __name__ == "__main__":
         "--image",
         type=str,
         required=False,
-        default="image_left_color",
+        default="thermal_left",
         help="name of image folder",
     )
     parser.add_argument(
@@ -69,6 +67,7 @@ if __name__ == "__main__":
     intrinsics = (
         torch.tensor(config["intrinsics"]["K"]).reshape(3, 3).to(config["device"])
     )
+    distortion = config["intrinsics"]["distortion_coeffs"]
     extrinsics = pose_to_htm(
         np.concatenate(
             [np.array(config["extrinsics"]["p"]), np.array(config["extrinsics"]["q"])],
@@ -96,24 +95,34 @@ if __name__ == "__main__":
     ## first create the trajectory interpolator
     odom_dir = os.path.join(args.run_dir, args.odom)
     poses = np.loadtxt(os.path.join(odom_dir, "data.txt"))
-    pose_ts = np.loadtxt(os.path.join(odom_dir, "timestamps.txt"))
-    mask = np.ones_like(pose_ts).astype(bool)
-    mask[1:] = np.abs(pose_ts[1:] - pose_ts[:-1]) > 1e-4
-    poses = poses[mask]
-    pose_ts = pose_ts[mask]
+    pose_ts = np.loadtxt(os.path.join(odom_dir, "timestamps.txt")) 
 
     traj_interp = TrajectoryInterpolator(pose_ts, poses, tol=0.5)
 
     ## next compute gridmap sample times
     pcl_dir = os.path.join(args.run_dir, args.pcl)
     image_dir = os.path.join(args.run_dir, args.image)
-
     pcl_ts = np.loadtxt(os.path.join(pcl_dir, "timestamps.txt"))
     image_ts = np.loadtxt(os.path.join(image_dir, "timestamps.txt"))
 
+    # Filter time (only include overlapping range)
+    start_time = max(pcl_ts[0], image_ts[0])
+    end_time = min(pcl_ts[-1], image_ts[-1])
+    pcl_ts = pcl_ts[(pcl_ts >= start_time) & (pcl_ts <= end_time)]
+    image_ts = image_ts[(image_ts >= start_time) & (image_ts <= end_time)]
+    tmask = (pose_ts >= start_time) & (pose_ts <= end_time)
+    pose_ts = pose_ts[tmask]
+    poses = poses[tmask]
+
+    # Filter pose
+    mask = np.ones_like(pose_ts).astype(bool)
+    mask[1:] = np.abs(pose_ts[1:] - pose_ts[:-1]) > 1e-4
+    poses = poses[mask]; pose_ts = pose_ts[mask]
+    pcl_ts = pcl_ts[mask]; image_ts = image_ts[mask]
+
     # timestamp check
     if args.timestamp_check:
-        x = np.arange(len(pose_ts))
+        x = np.arange(len(pose_ts)) 
         plt.scatter(x, pose_ts, label="pose ({} samples)".format(pose_ts.shape[0]))
         plt.scatter(x, pcl_ts, label="pcl ({} samples)".format(pcl_ts.shape[0]))
         plt.scatter(x, image_ts, label="image ({} samples)".format(image_ts.shape[0]))
@@ -126,6 +135,7 @@ if __name__ == "__main__":
     pcl_idxs = np.argmin(image_to_pcl_tdiffs, axis=0)
     pcl_errs = np.min(image_to_pcl_tdiffs, axis=0)
 
+
     print(
         "pcl->image timesync errs: mean: {:.4f}s, max: {:.4f}s".format(
             pcl_errs.mean(), pcl_errs.max()
@@ -135,65 +145,59 @@ if __name__ == "__main__":
     for ii in tqdm.tqdm(range(len(image_ts))):
         pcl_fp = os.path.join(args.run_dir, args.pcl, "{:08d}.npy".format(pcl_idxs[ii]))
         image_fp = os.path.join(args.run_dir, args.image, "{:08d}.png".format(ii))
-        img_t = image_ts[ii]
-
-        pose = traj_interp(img_t)
-        pose = pose_to_htm(pose).to(config["device"])
 
         pcl = torch.from_numpy(np.load(pcl_fp)).float().to(config["device"])
-        img = cv2.imread(image_fp)
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB) / 255.0
-        img = torch.tensor(img).unsqueeze(0).permute(0, 3, 1, 2)
+        img = cv2.imread(image_fp, cv2.IMREAD_UNCHANGED)
+        img, intrinsics = image_pipeline.run(img, intrinsics)
+        img = img / 255.0
+        img = torch.tensor(img).to(config["device"])#[H,W]
+        if len(img.shape) == 2:
+            img = img.unsqueeze(-1).expand(-1, -1, 3)#[H,W,3]
 
-        feature_img, feature_intrinsics = image_pipeline.run(
-            img, intrinsics.unsqueeze(0)
-        )
 
-        # move back to channels-last
-        feature_img = feature_img[0].permute(1, 2, 0)
-        feature_intrinsics = feature_intrinsics[0]
-
-        I = get_intrinsics(feature_intrinsics).to(config["device"])
+        I = get_intrinsics(intrinsics).to(config["device"])
         E = get_extrinsics(extrinsics).to(config["device"])
 
         P = obtain_projection_matrix(I, E)
-
-        pc_in_base = transform_points(pcl.clone(), torch.linalg.inv(pose))
-
-        pixel_coordinates = get_pixel_from_3D_source(pc_in_base[:, :3], P)
+        pixel_coordinates = get_pixel_from_3D_source(pcl[:, :3], P)
         (
             lidar_points_in_frame,
             pixels_in_frame,
             ind_in_frame,
         ) = get_points_and_pixels_in_frame(
-            pc_in_base[:, :3], pixel_coordinates, feature_img.shape[0], feature_img.shape[1]
+            pcl[:, :3], pixel_coordinates, img.shape[0], img.shape[1]
         )
 
-        feature_features = bilinear_interpolation(pixels_in_frame[..., [1,0]], feature_img)
-        feature_pcl = torch.cat([pcl[ind_in_frame][:, :3], feature_features], dim=-1)
+        rgb_colors = img[pixels_in_frame[:, 1], pixels_in_frame[:, 0]]
+        rgb_colors = rgb_colors.to(config["device"]).float()
+        rgb_pcl = torch.cat([pcl[ind_in_frame][:, :3], rgb_colors], dim=-1)
 
-        mask = ~torch.ones(pcl.shape[0], dtype=torch.bool, device=config["device"])
-        mask[ind_in_frame] = True
-        feature_pcl = FeaturePointCloudTorch.from_torch(pts=pcl, features=feature_features, mask=mask)
+        pose = traj_interp(image_ts[ii])
+        pose = pose_to_htm(pose).to(config["device"])
+        rgb_pcl = transform_points(rgb_pcl, pose)
 
+        no_feature_pcl = transform_points(pcl, pose)
         localmapper.update_pose(pose[:3, -1])
-        localmapper.add_feature_pc(pos=pose[:3, -1], feat_pc=feature_pcl, do_raytrace=False)
+        localmapper.add_feature_pc(pts=rgb_pcl[:, :3], features=rgb_pcl[:, 3:])
+
+        #also add non-colorized points
+        localmapper.add_pc(pts=no_feature_pcl[:, :3])
 
         if do_terrain_estimation:
             bev_features = terrain_estimator.run(localmapper.voxel_grid)
             torch.cuda.synchronize()
    
-        if (ii+1) % 50 == 0:
-            # localmapper.bev_grid.visualize();plt.show()
+        if (ii+1) % 100 == 0:
             localmapper.voxel_grid.visualize()
 
-            fig, axs = plt.subplots(4, 4, figsize=(16, 16))
-            axs = axs.flatten()
-            for i in range(min(len(axs), len(bev_features.feature_keys))):
-                k = bev_features.feature_keys[i]
-                data = bev_features.data[..., i]
-                axs[i].imshow(data.T.cpu().numpy(), origin='lower', cmap='jet', interpolation='none')
-                axs[i].set_title(k)
+            if do_terrain_estimation:
+                fig, axs = plt.subplots(4, 4, figsize=(16, 16))
+                axs = axs.flatten()
+                for i in range(min(len(axs), len(bev_features.feature_keys))):
+                    k = bev_features.feature_keys[i]
+                    data = bev_features.data[..., i]
+                    axs[i].imshow(data.T.cpu().numpy(), origin='lower', cmap='jet', interpolation='none')
+                    axs[i].set_title(k)
 
-            fig.suptitle('showing 16 of {} features'.format(len(bev_features.feature_keys)))
-            plt.show()
+                fig.suptitle('showing 16 of {} features'.format(len(bev_features.feature_keys)))
+                plt.show()

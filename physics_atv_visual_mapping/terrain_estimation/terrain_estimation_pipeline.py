@@ -9,6 +9,7 @@ from physics_atv_visual_mapping.terrain_estimation.processing_blocks.elevation_f
 # from physics_atv_visual_mapping.terrain_estimation.processing_blocks.sdf import SDF
 from physics_atv_visual_mapping.terrain_estimation.processing_blocks.terrain_inflation import TerrainInflation
 from physics_atv_visual_mapping.terrain_estimation.processing_blocks.mrf_terrain_estimation import MRFTerrainEstimation
+from physics_atv_visual_mapping.terrain_estimation.processing_blocks.porosity import Porosity
 from physics_atv_visual_mapping.terrain_estimation.processing_blocks.slope import Slope
 from physics_atv_visual_mapping.terrain_estimation.processing_blocks.terrain_diff import TerrainDiff
 from physics_atv_visual_mapping.terrain_estimation.processing_blocks.bev_feature_splat import BEVFeatureSplat
@@ -37,8 +38,10 @@ def setup_terrain_estimation_pipeline(config):
             block = TerrainInflation(**block_config["args"])
         elif btype == "mrf_terrain_estimation":
             block = MRFTerrainEstimation(**block_config["args"])
+        elif btype == "porosity":
+            block = Porosity(**block_config["args"])
         elif btype == "slope":
-            block = Slope(**block_config["args"])
+            block = Slope(**block_config["args"])you'll see the changes from the HEAD or base branch after the line <<<<<<< HEAD. Next, you'll see =======, which di
         elif btype == "terrain_diff":
             block = TerrainDiff(**block_config["args"])
         elif btype == "bev_feature_splat":

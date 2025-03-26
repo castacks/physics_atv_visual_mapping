@@ -1,0 +1,46 @@
+models_dir: /home/tartandriver/tartandriver_ws/models
+
+image:
+    folder: thermal_left
+
+pointcloud:
+    folder: pcl
+
+odometry:
+    folder: odom
+
+image_processing:
+    -
+        type: thermal
+        args: 
+            process: minmax #thermal 16->8 processing: minmax / hist
+            enhance: False #apply enhancement to 8bit
+            rectify: True #perform rectify
+            distortion: [-0.367732796157476, 0.12110213142717571, -0.0006255396681117811, 0.00041510869260370575]
+
+localmapping:
+    mapper_type: voxel
+    layer_key: dino
+    ema: 0.5 #higher->use recent more
+    n_features: 3
+    metadata:
+        origin: [-60., -60., -30.]
+        length: [120., 120., 60.]
+        resolution: [0.4, 0.4, 0.4]
+
+pca_nfeats: 64 #reduce output feats to this dim
+#pca_nfeats: 128 #reduce output feats to this dim
+
+pcl_mindist: 3.0
+pcl_maxdist: 50.0
+
+extrinsics:
+    p: [ 0.19265, -0.15227,  0.05708]
+    q: [ 0.5574714 , -0.54525728,  0.44844936,  0.43682184] #xyzw
+
+#this is for the original image size (we will auto-adjust to reflect image_insize)
+intrinsics:
+    K: [412.42744452, 0.0, 313.38643993,0.0, 412.60673097, 249.37501763, 0.0, 0.0, 1.0]
+    distortion_coeffs: [-0.367732796157476, 0.12110213142717571, -0.0006255396681117811, 0.00041510869260370575]
+
+device: cuda

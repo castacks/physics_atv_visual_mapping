@@ -128,6 +128,38 @@ def get_pixel_from_3D_source(lidar_points, P):
 
     return pixel_coordinates
 
+def bilinear_interpolation(pixel_coordinates, image):
+    """
+    Perform bilinear interpolation at pixel coordinates in image
+    Args:
+        pixel_coordinates: [N x 2] FloatTensor of pixel coordinates
+        image: [W x H x C] FloatTensor of image data
+    """
+    rem = torch.frac(pixel_coordinates) #ok to just do this bc no negative idxs
+    offset = torch.tensor([
+        [0, 0],
+        [1, 0],
+        [0, 1],
+        [1, 1]
+    ], device=image.device).view(4, 1, 2)
+
+    idxs = torch.tile(pixel_coordinates.view(1, -1, 2), (4, 1, 1)).long() + offset
+
+    #equivalent to same-padding
+    idxs[..., 0] = idxs[..., 0].clip(0, image.shape[0]-1)
+    idxs[..., 1] = idxs[..., 1].clip(0, image.shape[1]-1)
+
+    weights = torch.stack([
+        (1.-rem[:, 0]) * (1.-rem[:, 1]),
+        rem[:, 0] * (1.-rem[:, 1]),
+        (1. - rem[:, 0]) * rem[:, 1],
+        rem[:, 0] * rem[:, 1]
+    ], dim=0)
+
+    feats = image[idxs[..., 0], idxs[..., 1]]
+
+    interp_feats = (weights.view(4, -1, 1) * feats).sum(dim=0)
+    return interp_feats
 
 def get_points_and_pixels_in_frame(
     lidar_points, pixel_coordinates, image_height, image_width
@@ -170,7 +202,9 @@ def get_points_and_pixels_in_frame(
     ind_in_frame = cond1 & cond2 & cond3 & cond4 & cond5 #& cond6
 
     lidar_points_in_frame = lidar_points[ind_in_frame, :]
-    pixels_in_frame = pixel_coordinates[ind_in_frame, :].long()
+
+    #return floats to allow for bilinear interp
+    pixels_in_frame = pixel_coordinates[ind_in_frame, :]
 
     return lidar_points_in_frame, pixels_in_frame, ind_in_frame
 

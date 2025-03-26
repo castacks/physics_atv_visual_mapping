@@ -2,18 +2,23 @@ import torch
 import torch_scatter
 import open3d as o3d
 
+from numpy import pi as PI
+
+from ros_torch_converter.datatypes.pointcloud import FeaturePointCloudTorch
+
 from physics_atv_visual_mapping.localmapping.base import LocalMapper
 from physics_atv_visual_mapping.utils import *
-
 
 class VoxelLocalMapper(LocalMapper):
     """Class for local mapping voxels"""
 
-    def __init__(self, metadata, n_features, ema, device):
+    def __init__(self, metadata, n_features, ema, raytracer=None, device='cpu'):
         super().__init__(metadata, device)
         assert metadata.ndims == 3, "VoxelLocalMapper requires 3d metadata"
         self.voxel_grid = VoxelGrid(self.metadata, n_features, device)
         self.n_features = n_features
+        self.raytracer = raytracer
+        self.do_raytrace = self.raytracer is not None
         self.ema = ema
 
     def update_pose(self, pose: torch.Tensor):
@@ -32,75 +37,116 @@ class VoxelLocalMapper(LocalMapper):
         self.voxel_grid.shift(px_shift)
         self.metadata.origin = new_origin
 
-    def add_pc(self, pts: torch.Tensor):
-        #this op is rather simple, as all we need to do is copy over the new idxs to aggregator
-        voxel_grid_new = VoxelGrid.from_pc(pts, self.metadata)
+    def add_feature_pc(self, pos: torch.Tensor, feat_pc: FeaturePointCloudTorch, do_raytrace=False, debug=False):
+        voxel_grid_new = VoxelGrid.from_feature_pc(feat_pc, self.metadata, self.n_features)
 
-        #ok now also merge the non-feature voxels
-        all_raster_idxs = torch.cat([self.voxel_grid.all_indices, voxel_grid_new.all_indices])
-        unique_idxs = torch.unique(all_raster_idxs)
-        self.voxel_grid.all_indices = unique_idxs
+        if self.do_raytrace:
+            # self.raytracer.raytrace(pos, voxel_grid_meas=voxel_grid_new, voxel_grid_agg=self.voxel_grid)
+            self.raytracer.raytrace_but_better(pos, pc_meas=feat_pc, voxel_grid_agg=self.voxel_grid)
 
-        # import open3d as o3d
-        # pc_in = o3d.geometry.PointCloud()
-        # pc_in.points = o3d.utility.Vector3dVector(pts.cpu().numpy())
-
-        # grid_idxs = voxel_grid_new.raster_indices_to_grid_indices(voxel_grid_new.all_indices)
-        # voxel_pts = voxel_grid_new.grid_indices_to_pts(grid_idxs)
-
-        # pc_out = o3d.geometry.PointCloud()
-        # pc_out.points = o3d.utility.Vector3dVector(voxel_pts.cpu().numpy())
-        # voxel_grid = o3d.geometry.VoxelGrid.create_from_point_cloud(pc_out, voxel_size=self.metadata.resolution[0].item())
-
-        # o3d.visualization.draw_geometries([voxel_grid, pc_in])
-
-    def add_feature_pc(self, pts: torch.Tensor, features: torch.Tensor):
-        voxel_grid_new = VoxelGrid.from_feature_pc(pts, features[:, :self.n_features], self.metadata)
-
-        all_raster_idxs = torch.cat([self.voxel_grid.indices, voxel_grid_new.indices])
-        unique_idxs, inv_idxs, counts = torch.unique(
-            all_raster_idxs, return_inverse=True, return_counts=True
+        #first map all indices with features
+        all_raster_idxs = torch.cat([self.voxel_grid.raster_indices, voxel_grid_new.raster_indices])
+        unique_raster_idxs, inv_idxs, counts = torch.unique(
+            all_raster_idxs, return_inverse=True, return_counts=True, sorted=True
         )
-        feat_buf = torch.zeros(
-            unique_idxs.shape[0],
+
+        # we need an index into both the full set of idxs and also the feature buffer
+        # note that since we're sorting by raster index, we can align the two buffers
+        all_feature_raster_idxs = torch.cat([self.voxel_grid.feature_raster_indices, voxel_grid_new.feature_raster_indices])
+        unique_feature_raster_idxs, feat_inv_idxs = torch.unique(all_feature_raster_idxs, return_inverse=True, sorted=True)
+
+        # separate out idxs that are in 1 voxel grid vs both
+        vg1_inv_idxs = inv_idxs[: self.voxel_grid.raster_indices.shape[0]] #index from vg1 idxs to aggregated buffer
+        vg1_feat_inv_idxs = feat_inv_idxs[:self.voxel_grid.feature_raster_indices.shape[0]] #index from feature idxs into aggregated feature buffer
+        vg1_has_feature = self.voxel_grid.feature_mask #this line requires that the voxel grid is sorted by raster idx
+
+        vg2_inv_idxs = inv_idxs[self.voxel_grid.raster_indices.shape[0] :]
+        vg2_feat_inv_idxs = feat_inv_idxs[self.voxel_grid.feature_raster_indices.shape[0]:]
+        vg2_has_feature = voxel_grid_new.feature_mask #this line requires that the voxel grid is sorted by raster idx
+
+        vg1_feat_buf = torch.zeros(
+            unique_feature_raster_idxs.shape[0],
             self.voxel_grid.features.shape[-1],
             device=self.voxel_grid.device,
         )
+        vg1_feat_buf_mask = torch.zeros(vg1_feat_buf.shape[0], dtype=torch.bool, device=self.voxel_grid.device)
 
-        # separate out idxs that are in 1 voxel grid vs both
-        vg1_inv_idxs = inv_idxs[: self.voxel_grid.indices.shape[0]]
-        vg1_is_collision = counts[vg1_inv_idxs] == 2
-        vg2_inv_idxs = inv_idxs[self.voxel_grid.indices.shape[0] :]
-        vg2_is_collision = counts[vg2_inv_idxs] == 2
+        vg2_feat_buf = vg1_feat_buf.clone()
+        vg2_feat_buf_mask = vg1_feat_buf_mask.clone()
 
-        # passthrough features in just 1 grid
-        feat_buf[vg1_inv_idxs[~vg1_is_collision]] += self.voxel_grid.features[
-            ~vg1_is_collision
-        ]
-        feat_buf[vg2_inv_idxs[~vg2_is_collision]] += voxel_grid_new.features[
-            ~vg2_is_collision
-        ]
+        feat_buf = vg1_feat_buf.clone()
 
-        # merge features in both with EMA
-        feat_buf[vg1_inv_idxs[vg1_is_collision]] += (
-            1.0 - self.ema
-        ) * self.voxel_grid.features[vg1_is_collision]
-        feat_buf[vg2_inv_idxs[vg2_is_collision]] += (
-            self.ema * voxel_grid_new.features[vg2_is_collision]
-        )
+        #first copy over the original features
+        vg1_feat_buf[vg1_feat_inv_idxs] += self.voxel_grid.features
+        vg1_feat_buf_mask[vg1_feat_inv_idxs] = True
 
-        self.voxel_grid.indices = unique_idxs
+        vg2_feat_buf[vg2_feat_inv_idxs] += voxel_grid_new.features
+        vg2_feat_buf_mask[vg2_feat_inv_idxs] = True
+
+        #apply ema
+        ema_mask = vg1_feat_buf_mask & vg2_feat_buf_mask
+        feat_buf[vg1_feat_buf_mask & ~ema_mask] = vg1_feat_buf[vg1_feat_buf_mask & ~ema_mask]
+        feat_buf[vg2_feat_buf_mask & ~ema_mask] = vg2_feat_buf[vg2_feat_buf_mask & ~ema_mask]
+        feat_buf[ema_mask] = (1.-self.ema) * vg1_feat_buf[ema_mask] + self.ema * vg2_feat_buf[ema_mask]
+
+        #ok now i have the merged features and the final raster idxs. need to make the mask
+        feature_mask = torch.zeros(unique_raster_idxs.shape[0], dtype=torch.bool, device=self.voxel_grid.device)
+        feature_mask[vg1_inv_idxs] = (feature_mask[vg1_inv_idxs] | vg1_has_feature) 
+        feature_mask[vg2_inv_idxs] = (feature_mask[vg2_inv_idxs] | vg2_has_feature)
+
+        self.voxel_grid.raster_indices = unique_raster_idxs
         self.voxel_grid.features = feat_buf
+        self.voxel_grid.feature_mask = feature_mask
 
-        #ok now also merge the non-feature voxels
-        all_raster_idxs = torch.cat([self.voxel_grid.all_indices, voxel_grid_new.all_indices])
-        unique_idxs = torch.unique(all_raster_idxs)
-        self.voxel_grid.all_indices = unique_idxs
+        hit_buf = torch.zeros(
+            unique_raster_idxs.shape[0],
+            device=self.voxel_grid.device,
+        )
+        hit_buf[vg1_inv_idxs] += self.voxel_grid.hits
+        hit_buf[vg2_inv_idxs] += voxel_grid_new.hits
+
+        miss_buf = torch.zeros(
+            unique_raster_idxs.shape[0],
+            device=self.voxel_grid.device,
+        )
+        miss_buf[vg1_inv_idxs] += self.voxel_grid.misses
+        miss_buf[vg2_inv_idxs] += voxel_grid_new.misses
+
+        self.voxel_grid.hits = hit_buf
+        self.voxel_grid.misses = miss_buf
+
+        #compute passthrough rate
+        passthrough_rate = self.voxel_grid.misses / (self.voxel_grid.hits + self.voxel_grid.misses)
+
+        cull_mask = passthrough_rate > 0.75
+
+        # print('culling {} voxels...'.format(cull_mask.sum()))
+
+        if debug:
+            import open3d as o3d
+            pts = self.voxel_grid.grid_indices_to_pts(self.voxel_grid.raster_indices_to_grid_indices(self.voxel_grid.raster_indices))
+            #solid=black, porous=green, cull=red
+            colors = torch.stack([torch.zeros_like(passthrough_rate), passthrough_rate, torch.zeros_like(passthrough_rate)], dim=-1)
+            colors[cull_mask] = torch.tensor([1., 0., 0.], device=self.device)
+            porosity_pc = o3d.geometry.PointCloud()
+            porosity_pc.points = o3d.utility.Vector3dVector(pts.cpu().numpy())
+            porosity_pc.colors = o3d.utility.Vector3dVector(colors.cpu().numpy())
+            o3d.visualization.draw_geometries([porosity_pc])
+
+        self.voxel_grid.hits = self.voxel_grid.hits[~cull_mask]
+        self.voxel_grid.misses = self.voxel_grid.misses[~cull_mask]
+        self.voxel_grid.raster_indices = self.voxel_grid.raster_indices[~cull_mask]
+
+        feat_cull_mask = cull_mask[self.voxel_grid.feature_mask]
+        self.voxel_grid.features = self.voxel_grid.features[~feat_cull_mask]
+        self.voxel_grid.feature_mask = self.voxel_grid.feature_mask[~cull_mask]
 
     def to(self, device):
         self.device = device
         self.voxel_grid = self.voxel_grid.to(device)
         self.metadata = self.metadata.to(device)
+        if self.raytracer:
+            self.raytracer = self.raytracer.to(device)
         return self
 
 
@@ -109,66 +155,106 @@ class VoxelGrid:
     Actual class that handles feature aggregation
     """
 
-    def from_feature_pc(pts, features, metadata):
+    def from_feature_pc(feat_pc, metadata, n_features=-1):
         """
         Instantiate a VoxelGrid from a feauture pc
-        """
-        voxelgrid = VoxelGrid(metadata, features.shape[-1], features.device)
 
-        grid_idxs, valid_mask = voxelgrid.get_grid_idxs(pts)
+        Steps:
+            1. separate out feature points and non-feature points
+        """
+        n_features = feat_pc.features.shape[-1] if n_features == -1 else n_features
+
+        voxelgrid = VoxelGrid(metadata, n_features, feat_pc.device)
+
+        feature_pts = feat_pc.feature_pts
+        feature_pts_features = feat_pc.features[:, :n_features]
+        non_feature_pts = feat_pc.non_feature_pts
+
+        #first scatter and average the feature points
+
+        grid_idxs, valid_mask = voxelgrid.get_grid_idxs(feature_pts)
         valid_grid_idxs = grid_idxs[valid_mask]
-        valid_feats = features[valid_mask]
+        valid_feats = feature_pts_features[valid_mask]
 
         valid_raster_idxs = voxelgrid.grid_indices_to_raster_indices(valid_grid_idxs)
 
-        unique_raster_idxs, inv_idxs = torch.unique(
-            valid_raster_idxs, return_inverse=True
+        #NOTE: we need the voxel raster indices to be in ascending order (at least, within feat/no-feat) for stuff to work
+        feature_raster_idxs, inv_idxs = torch.unique(
+            valid_raster_idxs, return_inverse=True, sorted=True
         )
         
         feat_buf = torch_scatter.scatter(
-            src=valid_feats, index=inv_idxs, dim_size=unique_raster_idxs.shape[0], reduce="mean", dim=0
+            src=valid_feats, index=inv_idxs, dim_size=feature_raster_idxs.shape[0], reduce="mean", dim=0
         )
 
-        voxelgrid.indices = unique_raster_idxs
-        voxelgrid.features = feat_buf
-
-        voxelgrid.all_indices = unique_raster_idxs
-
-        return voxelgrid
-
-    def from_pc(pts, metadata):
-        voxelgrid = VoxelGrid(metadata, 0, pts.device)
-
-        grid_idxs, valid_mask = voxelgrid.get_grid_idxs(pts)
+        #then add in non-feature points
+        grid_idxs, valid_mask = voxelgrid.get_grid_idxs(non_feature_pts)
         valid_grid_idxs = grid_idxs[valid_mask]
-
         valid_raster_idxs = voxelgrid.grid_indices_to_raster_indices(valid_grid_idxs)
+        non_feature_raster_idxs = torch.unique(valid_raster_idxs)
 
-        unique_raster_idxs, inv_idxs = torch.unique(
-            valid_raster_idxs, return_inverse=True
-        )
+        _raster_idxs_cnt_in = torch.cat([feature_raster_idxs, feature_raster_idxs, non_feature_raster_idxs])
+        _raster_idxs, _raster_idx_cnts = torch.unique(_raster_idxs_cnt_in, return_counts=True)
+        non_feature_raster_idxs = _raster_idxs[_raster_idx_cnts == 1]
 
-        voxelgrid.all_indices = unique_raster_idxs
+        #store in voxel grid
+        n_feat_voxels = feature_raster_idxs.shape[0]
+        all_raster_idxs = torch.cat([feature_raster_idxs, non_feature_raster_idxs])
+        feat_mask = torch.zeros(all_raster_idxs.shape[0], dtype=torch.bool, device=feat_pc.device)
+        feat_mask[:n_feat_voxels] = True
+
+        voxelgrid.raster_indices = all_raster_idxs
+        voxelgrid.features = feat_buf
+        voxelgrid.feature_mask = feat_mask
+
+        voxelgrid.hits = torch.ones(all_raster_idxs.shape[0], device=voxelgrid.device)
+        voxelgrid.misses = torch.zeros(all_raster_idxs.shape[0], device=voxelgrid.device)
 
         return voxelgrid
+
+    # def from_pc(pts, metadata):
+    #     voxelgrid = VoxelGrid(metadata, 0, pts.device)
+
+    #     grid_idxs, valid_mask = voxelgrid.get_grid_idxs(pts)
+    #     valid_grid_idxs = grid_idxs[valid_mask]
+
+    #     valid_raster_idxs = voxelgrid.grid_indices_to_raster_indices(valid_grid_idxs)
+
+    #     unique_raster_idxs, inv_idxs = torch.unique(
+    #         valid_raster_idxs, return_inverse=True
+    #     )
+
+    #     voxelgrid.all_indices = unique_raster_idxs
+
+    #     voxelgrid.hits = torch.ones(unique_raster_idxs.shape[0], device=voxelgrid.device)
+    #     voxelgrid.misses = torch.zeros(unique_raster_idxs.shape[0], device=voxelgrid.device)
+
+    #     return voxelgrid
 
     def __init__(self, metadata, n_features, device):
         self.metadata = metadata
 
-        self.indices = torch.zeros(0, dtype=torch.long, device=device)
+        #raster indices of all points in voxel grid
+        self.raster_indices = torch.zeros(0, dtype=torch.long, device=device)
+
+        #list of features for all points in grid with features
         self.features = torch.zeros(0, n_features, dtype=torch.float, device=device)
 
-        #not sure this is the bast way to do things, but for now add
-        #  another index list that doesnt have corresponding features
-        self.all_indices = torch.zeros(0, dtype=torch.long, device=device)
+        #mapping from indices to features (i.e. raster_indices[mask] = features)
+        self.feature_mask = torch.zeros(0, dtype=torch.bool, device=device)
+
+        self.hits = torch.zeros(0, dtype=torch.float, device=device) + 1e-8
+        self.misses = torch.zeros(0, dtype=torch.float, device=device)
 
         self.device = device
 
     @property
-    def non_feature_indices(self):
-        _idxs = torch.cat([self.indices, self.all_indices])
-        idxs, cnts = torch.unique(_idxs, return_counts=True)
-        return idxs[cnts==1]
+    def non_feature_raster_indices(self):
+        return self.raster_indices[~self.feature_mask]
+
+    @property
+    def feature_raster_indices(self):
+        return self.raster_indices[self.feature_mask]
 
     def get_grid_idxs(self, pts):
         """
@@ -188,17 +274,15 @@ class VoxelGrid:
                         note that this means the data is shifted 3 cells right and 5 cells down
         """
         #shift feature indices
-        grid_indices = self.raster_indices_to_grid_indices(self.indices)
+        grid_indices = self.raster_indices_to_grid_indices(self.raster_indices)
         grid_indices = grid_indices - px_shift.view(1, 3)
         mask = self.grid_idxs_in_bounds(grid_indices)
-        self.indices = self.grid_indices_to_raster_indices(grid_indices[mask])
-        self.features = self.features[mask]
+        self.raster_indices = self.grid_indices_to_raster_indices(grid_indices[mask])
 
-        #shift all indices
-        grid_indices = self.raster_indices_to_grid_indices(self.all_indices)
-        grid_indices = grid_indices - px_shift.view(1, 3)
-        mask = self.grid_idxs_in_bounds(grid_indices)
-        self.all_indices = self.grid_indices_to_raster_indices(grid_indices[mask])
+        self.features = self.features[mask[self.feature_mask]]
+        self.feature_mask = self.feature_mask[mask]
+        self.hits = self.hits[mask]
+        self.misses = self.misses[mask]
 
         self.metadata.origin += px_shift * self.metadata.resolution
 
@@ -285,21 +369,19 @@ class VoxelGrid:
     def visualize(self, viz_all=True):
         pc = o3d.geometry.PointCloud()
         pts = self.grid_indices_to_pts(
-            self.raster_indices_to_grid_indices(self.indices)
+            self.raster_indices_to_grid_indices(self.feature_raster_indices)
         )
         colors = normalize_dino(self.features[:, :3])
 
         #all_indices is a superset of indices
         if viz_all:
-            all_idxs = torch.cat([self.indices, self.all_indices])
-            unique, cnts = torch.unique(all_idxs, return_counts=True)
-            non_colorized_idxs = unique[cnts==1]
+            non_colorized_idxs = self.non_feature_raster_indices
 
             non_colorized_pts = self.grid_indices_to_pts(
                 self.raster_indices_to_grid_indices(non_colorized_idxs)
             )
 
-            color_placeholder = 0.1 * torch.ones(non_colorized_pts.shape[0], 3, device=non_colorized_pts.device)
+            color_placeholder = 0.3 * torch.ones(non_colorized_pts.shape[0], 3, device=non_colorized_pts.device)
 
             pts = torch.cat([pts, non_colorized_pts], dim=0)
             colors = torch.cat([colors, color_placeholder], dim=0)
@@ -310,6 +392,8 @@ class VoxelGrid:
 
     def to(self, device):
         self.device = device
-        self.indices = self.indices.to(device)
+        self.raster_indices = self.raster_indices.to(device)
         self.features = self.features.to(device)
+        self.hits = self.hits.to(device)
+        self.misses = self.misses.to(device)
         return self

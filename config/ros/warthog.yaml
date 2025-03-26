@@ -1,0 +1,125 @@
+models_dir: /phoenix/cmu_sara_perception_models #necessary to include this for non-ROS offline proc
+# models_dir: /home/tartandriver/tartandriver_ws/models
+
+image:
+    image_topic: sensors/multisense_front/aux/image_rect_color/camera_info
+    camera_info_topic: sensors/multisense_front/aux/image_rect_color
+    image_compressed: False
+
+pointcloud:
+   topic: registered_scan
+
+odometry:
+    topic: integrated_to_init
+
+gridmap:
+    topic: local_gridmap
+
+#the base link of the vehicle (e.g. base_link, vehicle, etc.)
+vehicle_frame: vehicle 
+
+#camera intrinsics
+intrinsics:
+    K: [1064.3520, 0., 732.8348, 0., 1064.3520, 581.5662, 0., 0., 1]
+    P: [1064.3520, 0., 732.8348, 0., 1064.3520, 581.5662, 0., 0., 1]
+
+#transform from the vehicle link to the camera link
+extrinsics:
+    p: [0.353, 1.025, -0.627]
+    q: [-0.509, 0.512, -0.492, -0.485] #xyzw
+
+image_processing:
+    -
+        type: radio
+        args:
+            radio_type: radio_v2.5-b # radio_v2 e-radio_v2
+            image_insize: [672, 496]  # Original Image Size must be divisible by 16
+
+    - 
+        type: pca
+        args:
+            fp: physics_atv_visual_mapping/pca/radio_v2.5b_64_gascola_20250124.pt
+
+# voxel
+localmapping:
+    mapper_type: voxel
+    layer_key: dino
+    ema: 0.5 #higher->use recent more
+    n_features: 16
+    metadata:
+        origin: [-25., -25., -15.]
+        length: [50.001, 50.001, 30.001]
+        resolution: [0.2, 0.2, 0.2]
+
+terrain_estimation:
+    -
+        type: elevation_stats
+        args: {}
+
+    -
+        type: elevation_filter
+        args:
+            input_layer: min_elevation
+            cnt_layer: num_voxels
+
+            height_low_thresh: -3.0 #cells this far below their neighbors are not terrain
+            height_high_thresh: 0.5 #cells this far above their neighbors are not terrain
+
+            kernel_params:
+                kernel_type: gaussian #one of {gaussian/box} the kernel type to use for inflation
+
+                kernel_radius: 0.25 #kernel radius in m
+                kernel_sharpness: 0.5 #sharpness of (Gaussian) kernel
+
+    -
+        type: terrain_inflation
+        args:
+            input_layer: min_elevation_filtered
+            mask_layer: min_elevation_filtered_mask
+
+            kernel_params:
+                kernel_type: gaussian #one of {gaussian/box} the kernel type to use for inflation
+
+                kernel_radius: 3.0 #kernel radius in m
+                kernel_sharpness: 1.0 #sharpness of (Gaussian) kernel
+
+    - 
+        type: mrf_terrain_estimation
+        args: 
+            input_layer: min_elevation_filtered_inflated
+            mask_layer: min_elevation_filtered_inflated_mask
+
+            itrs: 5   #num updates
+            alpha: 1. #weight on the measurement update
+            beta: 10.  #weight on the neighbor update
+            lr: 0.05   #learning rate
+
+            kernel_params:
+                kernel_type: gaussian #one of {gaussian/box} the kernel type to use for inflation
+
+                kernel_radius: 0.4
+                kernel_sharpness: 1.0
+
+    - 
+        type: slope
+        args:
+            input_layer: terrain
+            mask_layer: min_elevation_filtered_inflated_mask
+
+    -
+        type: terrain_diff
+        args:
+            terrain_layer: terrain
+            max_elevation_layer: max_elevation
+            max_elevation_mask_layer: num_voxels
+            overhang: 2.0 #done to match irl yamaha values
+    -
+        type: terrain_aware_bev_feature_splat
+        args:
+            output_key: dino
+            terrain_layer: terrain
+            terrain_mask_layer: min_elevation_filtered_inflated_mask
+            overhang: 1.0
+
+device: cuda
+viz: False

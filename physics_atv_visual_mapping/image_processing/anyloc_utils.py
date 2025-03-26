@@ -62,6 +62,7 @@ class DinoV2ExtractFeatures:
         - device:   PyTorch device to use
         """
         self.vit_type: str = dino_model
+        self.has_registers = "reg" in self.vit_type
         # self.dino_model: nn.Module = torch.hub.load(
         #         'facebookresearch/dinov2', dino_model)
         # print(dino_dir,'________________________________________________________')
@@ -146,7 +147,10 @@ class DinoV2ExtractFeatures:
             res = F.normalize(res, dim=-1)
         self._hook_out = None  # Reset the hook
 
-        # switch back to channels-first
+        #remove the register tokens from the image feats
+        if self.has_registers:
+            res = res[:, 4:] #This seems to work better than removing the front 4 tokens
+
         return res.view(
             img.shape[0], self.output_size[1], self.output_size[0], -1
         ).permute(0, 3, 1, 2)

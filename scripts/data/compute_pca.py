@@ -154,12 +154,17 @@ if __name__ == "__main__":
                     pcl, pcl_pixel_coords, dino_feats.shape[0], dino_feats.shape[1]
                 )
 
+                #ok to just int cast here
+                pcl_pixel_coords = pcl_pixel_coords.long()
+
                 pcl_px_in_frame = pcl_pixel_coords[ind_in_frame]
-                dino_idxs = pixels_in_frame.unique(
+                dino_idxs = pcl_px_in_frame.unique(
                     dim=0
                 )  # only get feats with a lidar return
 
-                mask_dino_feats = dino_feats[dino_idxs[:, 1], dino_idxs[:, 0]]
+                # mask_dino_feats = dino_feats[dino_idxs[:, 1], dino_idxs[:, 0]]
+
+                mask_dino_feats = dino_feats.view(-1, dino_feats.shape[-1])
                 dino_buf.append(mask_dino_feats)
 
             """
@@ -296,8 +301,11 @@ if __name__ == "__main__":
                 pcl, pcl_pixel_coords, dino_feats.shape[0], dino_feats.shape[1]
             )
 
+            #ok to just int cast here
+            pcl_pixel_coords = pcl_pixel_coords.long()
+
             pcl_px_in_frame = pcl_pixel_coords[ind_in_frame]
-            dino_idxs = pixels_in_frame.unique(
+            dino_idxs = pcl_px_in_frame.unique(
                 dim=0
             )  # only get feats with a lidar return
 

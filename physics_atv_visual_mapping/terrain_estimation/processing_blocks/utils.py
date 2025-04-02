@@ -16,6 +16,8 @@ def setup_kernel(metadata, kernel_type='box', kernel_radius=1., kernel_sharpness
         return box_kernel(kernel_dx)
     elif kernel_type == 'gaussian':
         return gaussian_kernel(kernel_dx, kernel_sharpness)
+    elif kernel_type == 'circle':
+        return circle_kernel(kernel_dx)
     elif kernel_type == 'neighbors':
         return torch.tensor([
             [0., 1., 0.],
@@ -25,6 +27,13 @@ def setup_kernel(metadata, kernel_type='box', kernel_radius=1., kernel_sharpness
 
 def box_kernel(rad):
     return torch.ones(2*rad[0]+1, 2*rad[1]+1)
+
+def circle_kernel(rad):
+    xs = torch.linspace(-1., 1., 2*rad[0] + 1)
+    ys = torch.linspace(-1., 1., 2*rad[1] + 1)
+    xs, ys = torch.meshgrid(xs, ys)
+
+    return (torch.hypot(xs, ys) <= 1.).float()
 
 def gaussian_kernel(rad, sharp):
     xs = torch.linspace(-1., 1., 2*rad[0] + 1) * sharp

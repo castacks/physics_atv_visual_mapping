@@ -49,7 +49,7 @@ class FrustumRaytracer:
         # voxel_maxdist_el_az_bins[voxel_maxdist_el_az_bins < 1e-6] = -1e10
 
         #set to lidar range to filter on misses
-        voxel_maxdist_el_az_bins[voxel_maxdist_el_az_bins < 1e-6] = 200.
+        voxel_maxdist_el_az_bins[voxel_maxdist_el_az_bins < 1e-6] = 100.
 
         el_az = torch.stack(torch.meshgrid(self.sensor_model["el_bins"][:-1], self.sensor_model["az_bins"][:-1], indexing='ij'), dim=-1)
         voxel_maxdist_sph = torch.cat([el_az.view(-1, 2), voxel_maxdist_el_az_bins.view(-1, 1)], dim=-1)
@@ -142,6 +142,7 @@ def setup_sensor_model(sensor_config, device='cpu'):
             "az_bins": az_bins,
             "az_thresh": az_thresh,
         }
+
     elif sensor_config["type"] == "VLP32C-front":
         #from the spec sheet @ 600RPM (https://icave2.cse.buffalo.edu/resources/sensor-modeling/VLP32CManual.pdf)
         az_bins = DEG_2_RAD * torch.linspace(-90., 90., 451, dtype=torch.float, device=device)
@@ -166,6 +167,23 @@ def setup_sensor_model(sensor_config, device='cpu'):
             "az_bins": az_bins,
             "az_thresh": az_thresh,
         }
+
+    elif sensor_config["type"] == "OS1-128":
+        az_bins = DEG_2_RAD * torch.linspace(-180., 180., 1025, dtype=torch.float, device=device)
+        az_thresh = (az_bins[1:] - az_bins[:-1]).min()
+
+        #implement elevation from spec sheet. subtract off half of thresh to get lower bin edges (and copy top bin edge)
+        # el_bins = DEG_2_RAD * torch.linspace(-22.5, 22.5, 33, dtype=torch.float, device=device)
+        el_bins = DEG_2_RAD * torch.linspace(-2.5, 22.5, 19, dtype=torch.float, device=device)
+        el_thresh = (el_bins[1:] - el_bins[:-1]).min()
+
+        return {
+            "el_bins": el_bins,
+            "el_thresh": el_thresh,
+            "az_bins": az_bins, 
+            "az_thresh": az_thresh,
+        }
+
     else:
         print("unsupported sensor model type {}".format(sensor_config["type"]))
         exit(1)

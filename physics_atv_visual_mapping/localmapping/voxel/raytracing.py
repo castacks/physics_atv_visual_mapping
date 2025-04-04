@@ -174,7 +174,7 @@ def setup_sensor_model(sensor_config, device='cpu'):
 
         #implement elevation from spec sheet. subtract off half of thresh to get lower bin edges (and copy top bin edge)
         # el_bins = DEG_2_RAD * torch.linspace(-22.5, 22.5, 33, dtype=torch.float, device=device)
-        el_bins = DEG_2_RAD * torch.linspace(-1.5, 45.0, 25, dtype=torch.float, device=device)
+        el_bins = DEG_2_RAD * torch.linspace(-15., 45.0, 43, dtype=torch.float, device=device)
         el_thresh = (el_bins[1:] - el_bins[:-1]).min()
 
         return {

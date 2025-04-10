@@ -8,12 +8,17 @@ class TerrainInflation(TerrainEstimationBlock):
     """
     Compute a per-cell min and max height
     """
-    def __init__(self, voxel_metadata, voxel_n_features, input_layer, mask_layer, kernel_params, device):
+    def __init__(self, voxel_metadata, voxel_n_features, input_layer, mask_layer, kernel_params, thresh, device):
+        """
+        Args:
+            thresh: at least this fraction of neighboring cells must be observed
+        """
         super().__init__(voxel_metadata, voxel_n_features, device)
         self.input_layer = input_layer
         self.mask_layer = mask_layer
         
         self.kernel = setup_kernel(**kernel_params, metadata=voxel_metadata).to(device)
+        self.thresh = thresh * self.kernel.sum()
         
     def to(self, device):
         self.device = device
@@ -36,7 +41,7 @@ class TerrainInflation(TerrainEstimationBlock):
         height_cnt = apply_kernel(kernel=self.kernel, data=valid_mask.float())
         height_avg = height_sum/height_cnt
 
-        output_valid_mask = height_cnt > 1e-4
+        output_valid_mask = height_cnt > self.thresh
         height_avg[~output_valid_mask] = 0.
 
         #only copy values where the interpolation is valid and there is no data

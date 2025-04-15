@@ -12,6 +12,7 @@ from physics_atv_visual_mapping.image_processing.processing_blocks.vlad import V
 from physics_atv_visual_mapping.image_processing.processing_blocks.pca_vlad import (
     PCAVLADBlock,
 )
+from physics_atv_visual_mapping.image_processing.processing_blocks.learned_feats import LearnedFeaturizerBlock
 # from physics_atv_visual_mapping.image_processing.processing_blocks.ganav import GANavBlock
 
 from physics_atv_visual_mapping.utils import normalize_dino
@@ -39,6 +40,8 @@ def setup_image_pipeline(config):
             block = PCAVLADBlock(
                 **block_config["args"], models_dir=config["models_dir"]
             )
+        elif btype == "learned_feats":
+            block = LearnedFeaturizerBlock(**block_config["args"], models_dir=config["models_dir"])
         # elif btype == 'ganav':
         #     block = GANavBlock(**block_config['args'])
         else:

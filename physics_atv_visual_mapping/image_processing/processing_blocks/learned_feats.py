@@ -8,10 +8,14 @@ from physics_atv_visual_mapping.image_processing.processing_blocks.base import (
 class LinearNN(torch.nn.Module):
     def __init__(self, insize, outsize):
         super(LinearNN, self).__init__()
-        self.linear = torch.nn.Linear(insize, outsize)
+        self.linear = torch.nn.Linear(insize, 128)
+        self.relu = torch.nn.ReLU()
+        self.linear2 = torch.nn.Linear(128, outsize)
+
+        self.nn = torch.nn.Sequential(self.linear, self.relu, self.linear2)
 
     def forward(self, x):
-        return self.linear.forward(x)
+        return self.nn.forward(x)
 
 class LearnedFeaturizerBlock(ImageProcessingBlock):
     """

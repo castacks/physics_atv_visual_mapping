@@ -7,8 +7,8 @@ localmapping:
     ema: 0.5 #higher->use recent more
     n_features: 3
     metadata:
-        origin: [-15., -15., -5.]
-        length: [30., 30., 10.]
+        origin: [-15., -15., -3.]
+        length: [30., 30., 6.]
         resolution: [0.2, 0.2, 0.05]
 
     raytracer:

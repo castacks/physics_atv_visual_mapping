@@ -167,9 +167,7 @@ terrain_estimation:
         type: terrain_diff
         args:
             terrain_layer: terrain
-            max_elevation_layer: max_elevation
-            max_elevation_mask_layer: num_voxels
-            overhang: 2.0
+            overhang: 1.7
     -
         type: terrain_aware_bev_feature_splat
         args:

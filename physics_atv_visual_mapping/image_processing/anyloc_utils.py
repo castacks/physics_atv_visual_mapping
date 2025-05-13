@@ -42,7 +42,7 @@ class DinoV2ExtractFeatures:
         self,
         dino_dir,
         dino_model: _DINO_V2_MODELS,
-        layer: int,
+        layers: List[int],
         input_size: tuple,
         facet: _DINO_FACETS = "token",
         use_cls=False,
@@ -82,29 +82,32 @@ class DinoV2ExtractFeatures:
         )
         self.dino_model.norm = torch.nn.Identity()
         self.dino_model = self.dino_model.eval().to(self.device)
-        # print(self.dino_model)
-        # s=r
-        self.layer: int = layer
+
+        self.layers: List[int] = layers
+        self.fh_handles = []
         self.facet = facet
         if self.facet == "token":
-            self.fh_handle = self.dino_model.blocks[self.layer].register_forward_hook(
-                self._generate_forward_hook()
-            )
+            for li, layer in enumerate(self.layers):
+                self.fh_handles.append(
+                    self.dino_model.blocks[layer].register_forward_hook(self._generate_forward_hook(li))
+                )
         else:
-            self.fh_handle = self.dino_model.blocks[
-                self.layer
-            ].attn.qkv.register_forward_hook(self._generate_forward_hook())
+            for li, layer in enumerate(self.layers):
+                self.fh_handles.append(
+                    self.dino_model.blocks[layer].attn.qkv.register_forward_hook(self._generate_forward_hook(li))
+                )
+
         self.use_cls = use_cls
         self.norm_descs = norm_descs
         # Hook data
-        self._hook_out = None
+        self._hook_out = [None] * len(self.layers)
 
         self.input_size = input_size
         self.output_size = (int(input_size[0] / 14), int(input_size[1] / 14))
 
-    def _generate_forward_hook(self):
+    def _generate_forward_hook(self, li):
         def _forward_hook(module, inputs, output):
-            self._hook_out = output
+            self._hook_out[li] = output
 
         return _forward_hook
 
@@ -131,33 +134,47 @@ class DinoV2ExtractFeatures:
         with torch.no_grad():
             img = self.preprocess(img)
             res = self.dino_model(img)
-            if self.use_cls:
-                res = self._hook_out
-            else:
-                res = self._hook_out[:, 1:, ...]
-            if self.facet in ["query", "key", "value"]:
-                d_len = res.shape[2] // 3
-                if self.facet == "query":
-                    res = res[:, :, :d_len]
-                elif self.facet == "key":
-                    res = res[:, :, d_len : 2 * d_len]
+
+            #debug
+            all_res = []
+
+            for i in range(len(self._hook_out)):
+                if self.use_cls:
+                    res = self._hook_out[i]
                 else:
-                    res = res[:, :, 2 * d_len :]
+                    res = self._hook_out[i][:, 1:, ...]
+
+                if self.facet in ["query", "key", "value"]:
+                    d_len = res.shape[2] // 3
+                    if self.facet == "query":
+                        res = res[:, :, :d_len]
+                    elif self.facet == "key":
+                        res = res[:, :, d_len : 2 * d_len]
+                    else:
+                        res = res[:, :, 2 * d_len :]
+
+                all_res.append(res)
+
         if self.norm_descs:
-            res = F.normalize(res, dim=-1)
-        self._hook_out = None  # Reset the hook
+            for i in range(len(all_res)):
+                all_res[i] = F.normalize(all_res[i], dim=-1)
+
+        self._hook_out = [None] * len(self.layers)  # Reset the hook
 
         #remove the register tokens from the image feats
         if self.has_registers:
-            res = res[:, 4:] #This seems to work better than removing the front 4 tokens
+            for i in range(len(all_res)):
+                all_res[i] = all_res[i][:, 4:] #This seems to work better than removing the front 4 tokens
+
+        res = torch.cat(all_res, dim=-1)
 
         return res.view(
             img.shape[0], self.output_size[1], self.output_size[0], -1
         ).permute(0, 3, 1, 2)
 
     def __del__(self):
-        self.fh_handle.remove()
-
+        for fh_handle in self.fh_handles:
+            fh_handle.remove()
 
 # %%
 # VLAD global descriptor implementation

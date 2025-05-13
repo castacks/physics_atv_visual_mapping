@@ -34,7 +34,7 @@ def viz_dino_features(img, dino_img, dino):
         axs[li + 1, 0].imshow(normalize_dino(pca_img[..., :3]).cpu().numpy())
         axs[li + 1, 1].imshow(normalize_dino(pca_img[..., 3:6]).cpu().numpy())
         axs[li + 1, 2].imshow(normalize_dino(pca_img[..., 6:]).cpu().numpy())
-        axs[li + 1, 0].set_ylabel('Layer {}'.format(layer))
+        # axs[li + 1, 0].set_ylabel('Layer {}'.format(layer))
 
     layer_img = dino_img
     layer_feats = layer_img.view(-1, layer_img.shape[-1])
@@ -49,7 +49,7 @@ def viz_dino_features(img, dino_img, dino):
     axs[-1, 1].imshow(normalize_dino(pca_img[..., 3:6]).cpu().numpy())
     axs[-1, 2].imshow(normalize_dino(pca_img[..., 6:]).cpu().numpy())
 
-    axs[-1, 0].set_ylabel('all layer PCA')
+    # axs[-1, 0].set_ylabel('all layer PCA')
 
     plt.show()
 
@@ -67,7 +67,7 @@ if __name__ == '__main__':
 
     torch.hub.set_dir(os.path.join(args.models_dir, "torch_hub"))
     dino_dir = os.path.join(args.models_dir, "torch_hub", "facebookresearch_dinov2_main")
-
+    radio_dir = os.path.join(args.models_dir, "torch_hub", "NVlabs_RADIO_main")
 
     #vitg
     # dino_args = {
@@ -81,18 +81,18 @@ if __name__ == '__main__':
     # }
 
     # #vitl
-    dino_args = {
-        'dino_dir': dino_dir,
-        'dino_model': 'dinov2_vitl14_reg',
-        'layers': [5, 8, 11, 14, 17, 20],
-        'input_size': [686 * 2, 364 * 2],
-        # 'input_size': [686, 364],
-        # 'input_size': [854, 448],
-        'facet': 'value',
-        'device': 'cuda'
-    }
+    # dino_args = {
+    #     'dino_dir': dino_dir,
+    #     'dino_model': 'dinov2_vitl14_reg',
+    #     'layers': [4, 8, 12, 16, 20],
+    #     # 'input_size': [686 * 2, 364 * 2],
+    #     # 'input_size': [686, 364],
+    #     'input_size': [854, 448],
+    #     'facet': 'value',
+    #     'device': 'cuda'
+    # }
 
-    # #vitb
+    #vitb
     # dino_args = {
     #     'dino_dir': dino_dir,
     #     'dino_model': 'dinov2_vitb14_reg',
@@ -102,6 +102,17 @@ if __name__ == '__main__':
     #     'facet': 'value',
     #     'device': 'cuda'
     # }
+
+    # radio
+    dino_args = {
+        'dino_dir': radio_dir,
+        'dino_model': 'radio_v2.5-l',
+        'layers': [9, 13, 17, 21],
+        # 'input_size': [672, 352],
+        'input_size': [848, 448],
+        'facet': 'value',
+        'device': 'cuda'
+    }
 
     dino = DinoV2ExtractFeatures(**dino_args)
 

@@ -72,9 +72,20 @@ class DinoV2ExtractFeatures:
         # self.dino_model = torch.hub.load('facebookresearch/dinov2', dino_model, source='github')
 
         # to run from local
-        self.dino_model: nn.Module = torch.hub.load(
-            dino_dir, dino_model, source="local"
-        )
+
+        if "dino" in dino_model:
+            self.dino_model: nn.Module = torch.hub.load(
+                dino_dir, dino_model, source="local"
+            )
+        elif "radio" in dino_model:
+            self.dino_model: nn.Module = torch.hub.load(
+                dino_dir,
+                "radio_model",
+                version=dino_model,
+                progress=True,
+                skip_validation=True,
+                source="local",
+            )
 
         self.device = torch.device(device)
         self.dino_model.blocks = nn.Sequential(
@@ -103,7 +114,11 @@ class DinoV2ExtractFeatures:
         self._hook_out = [None] * len(self.layers)
 
         self.input_size = input_size
-        self.output_size = (int(input_size[0] / 14), int(input_size[1] / 14))
+
+        if "dino" in dino_model:
+            self.output_size = (int(input_size[0] / 14), int(input_size[1] / 14))
+        elif "radio" in dino_model:
+            self.output_size = (int(input_size[0] / 16), int(input_size[1] / 16))
 
     def _generate_forward_hook(self, li):
         def _forward_hook(module, inputs, output):
@@ -125,12 +140,13 @@ class DinoV2ExtractFeatures:
         )
         return img
 
-    #    def __call__(self, img: np.ndarray) -> torch.Tensor:
+    @torch.compile
     def __call__(self, img: torch.Tensor) -> torch.Tensor:
         """
         Parameters:
         - img:   The input image
         """
+        # import pdb;pdb.set_trace()
         with torch.no_grad():
             img = self.preprocess(img)
             res = self.dino_model(img)
@@ -142,7 +158,7 @@ class DinoV2ExtractFeatures:
                 if self.use_cls:
                     res = self._hook_out[i]
                 else:
-                    res = self._hook_out[i][:, 1:, ...]
+                    res = self._hook_out[i][:, -self.output_size[0]*self.output_size[1]:, ...]
 
                 if self.facet in ["query", "key", "value"]:
                     d_len = res.shape[2] // 3
@@ -161,10 +177,12 @@ class DinoV2ExtractFeatures:
 
         self._hook_out = [None] * len(self.layers)  # Reset the hook
 
-        #remove the register tokens from the image feats
-        if self.has_registers:
-            for i in range(len(all_res)):
-                all_res[i] = all_res[i][:, 4:] #This seems to work better than removing the front 4 tokens
+        # #remove the register tokens from the image feats
+        # if self.has_registers:
+        #     for i in range(len(all_res)):
+        #         all_res[i] = all_res[i][:, 4:] #This seems to work better than removing the front 4 tokens
+
+        # import pdb;pdb.set_trace()
 
         res = torch.cat(all_res, dim=-1)
 

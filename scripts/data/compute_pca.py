@@ -164,7 +164,7 @@ if __name__ == "__main__":
 
                 # mask_dino_feats = dino_feats[dino_idxs[:, 1], dino_idxs[:, 0]]
 
-                mask_dino_feats = dino_feats.view(-1, dino_feats.shape[-1])
+                mask_dino_feats = dino_feats.view(-1, dino_feats.shape[-1]).cpu()
                 dino_buf.append(mask_dino_feats)
 
             """
@@ -220,6 +220,9 @@ if __name__ == "__main__":
     plt.bar([avg_feat_norm.shape[0]], avg_residual / avg_total_feat_norm, color="r", label="residual norm")
     plt.legend()
     plt.show()
+
+    feat_mean = feat_mean.cuda()
+    V = V.cuda()
 
     ## viz loop ##
     for ddir in run_dirs:
@@ -309,26 +312,26 @@ if __name__ == "__main__":
                 dim=0
             )  # only get feats with a lidar return
 
-            fig, axs = plt.subplots(2, 2, figsize=(32, 24))
+            fig, axs = plt.subplots(2, 3, figsize=(32, 24))
             axs = axs.flatten()
-            dino_viz = dino_feats[..., :3]
-            vmin = dino_viz.view(-1, 3).min(dim=0)[0].view(1, 1, 3)
-            vmax = dino_viz.view(-1, 3).max(dim=0)[0].view(1, 1, 3)
+            dino_viz = dino_feats[..., :9]
+            vmin = dino_viz.view(-1, 9).min(dim=0)[0].view(1, 1, 9)
+            vmax = dino_viz.view(-1, 9).max(dim=0)[0].view(1, 1, 9)
             dino_viz = (dino_viz - vmin) / (vmax - vmin)
 
             img = img.permute(1, 2, 0).cpu().numpy()
 
             axs[0].imshow(img, extent=extent)
-            #            axs[0].imshow(dino_viz.cpu(), alpha=0.5, extent=extent)
-            #            axs[0].scatter(pcl_px_in_frame[:, 0].cpu(), dino_feats.shape[0]-pcl_px_in_frame[:, 1].cpu(), s=1., alpha=0.5)
 
             axs[1].imshow(img, extent=extent)
-            axs[1].imshow(dino_viz.cpu(), alpha=0.5, extent=extent)
+            axs[1].imshow(dino_viz[..., :3].cpu(), alpha=0.5, extent=extent)
 
             mask = torch.zeros_like(dino_viz[..., 0])
             mask[dino_idxs[:, 1], dino_idxs[:, 0]] = 1.0
             axs[2].imshow(mask.cpu())
 
-            axs[3].imshow(dino_viz.cpu(), alpha=1.0, extent=extent)
+            axs[3].imshow(dino_viz[..., :3].cpu(), alpha=1.0, extent=extent)
+            axs[4].imshow(dino_viz[..., 3:6].cpu(), alpha=1.0, extent=extent)
+            axs[5].imshow(dino_viz[..., 6:].cpu(), alpha=1.0, extent=extent)
 
             plt.show()

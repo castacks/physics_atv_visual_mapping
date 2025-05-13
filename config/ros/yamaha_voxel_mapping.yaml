@@ -36,9 +36,9 @@ image_processing:
         type: dino
         args:
             dino_type: dinov2_vitb14_reg
-            dino_layer: 10
-            image_insize: [686, 364] #this should be the size of the input images
-            # image_insize: [854, 448]
+            dino_layers: [10]
+            # image_insize: [686, 364] #this should be the size of the input images
+            image_insize: [854, 448]
             desc_facet: value
     # - 
     #     type: pca

@@ -72,7 +72,6 @@ class DinoV2ExtractFeatures:
         # self.dino_model = torch.hub.load('facebookresearch/dinov2', dino_model, source='github')
 
         # to run from local
-
         if "dino" in dino_model:
             self.dino_model: nn.Module = torch.hub.load(
                 dino_dir, dino_model, source="local"

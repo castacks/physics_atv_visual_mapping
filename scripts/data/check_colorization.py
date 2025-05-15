@@ -95,8 +95,14 @@ if __name__ == "__main__":
             pcl = torch.from_numpy(np.load(pcl_fp)).to(config["device"]).float()
             pcl_t = pcl_ts[pcl_idx]
 
+            img_idx = pcl_img_argmin[pcl_idx]
+            img_fp = os.path.join(img_dir, "{:08d}.png".format(img_idx))
+            img_t = img_ts[img_idx]
+            img = cv2.imread(img_fp)
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB) / 255.0
+
             if not args.pc_in_local:
-                pose = traj_interp(pcl_t)
+                pose = traj_interp(img_t)
                 H = pose_to_htm(pose).to(config["device"]).float()
                 pcl = transform_points(pcl, torch.linalg.inv(H))
 
@@ -108,11 +114,6 @@ if __name__ == "__main__":
             pcl_dists = pcl_dists[pcl_mask]
 
             pcl = pcl[:, :3]  # assume first three are [x,y,z]
-
-            img_idx = pcl_img_argmin[pcl_idx]
-            img_fp = os.path.join(img_dir, "{:08d}.png".format(img_idx))
-            img = cv2.imread(img_fp)
-            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB) / 255.0
 
             P = obtain_projection_matrix(intrinsics, extrinsics).to(
                 config["device"]

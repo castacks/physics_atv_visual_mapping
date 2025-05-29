@@ -1,10 +1,53 @@
 models_dir: /home/tartandriver/tartandriver_ws/models #necessary to include this for non-ROS offline proc
 
-image:
-    image_topic: /multisense/left/image_rect_color
-    camera_info_topic: /multisense/left/camera_info
-    image_compressed: False
-    folder: image_left_color
+images:
+    image_left:
+        image_topic: /multisense/left/image_rect_color
+        camera_info_topic: /multisense/left/camera_info
+        image_compressed: False
+        folder: image_left_color
+
+        #camera intrinsics
+        intrinsics:
+            K: [600., 0., 480., 0., 600., 300., 0., 0., 1.]
+            P: [600., 0., 480., 0., 600., 300., 0., 0., 1.]
+
+        #transform from the vehicle link to the camera link
+        extrinsics:
+            p: [-1.789, 1.966, -0.788]
+            q: [0.805, -0.212, 0.150, 0.534] #xyzw
+        
+    image_front:
+        image_topic: /multisense/left/image_rect_color
+        camera_info_topic: /multisense/left/camera_info
+        image_compressed: False
+        folder: image_front_color
+
+       #camera intrinsics
+        intrinsics:
+            K: [600., 0., 480., 0., 600., 300., 0., 0., 1.]
+            P: [600., 0., 480., 0., 600., 300., 0., 0., 1.]
+
+        #transform from the vehicle link to the camera link
+        extrinsics:
+            p: [0.057, 2.308, -1.681]
+            q: [0.597, -0.593, 0.384, 0.380]  #xyzw
+
+    image_right:
+        image_topic: /multisense/left/image_rect_color
+        camera_info_topic: /multisense/left/camera_info
+        image_compressed: False
+        folder: image_right_color
+
+        #camera intrinsics
+        intrinsics:
+            K: [600., 0., 480., 0., 600., 300., 0., 0., 1.]
+            P: [600., 0., 480., 0., 600., 300., 0., 0., 1.]
+
+        #transform from the vehicle link to the camera link
+        extrinsics:
+            p: [1.933, 1.999, -0.735]
+            q: [-0.217, 0.812, -0.523, -0.144] #xyzw
 
 pointcloud:
    topic: /superodometry/velodyne_cloud_registered
@@ -14,49 +57,18 @@ odometry:
     topic: /superodometry/integrated_to_init
     folder: odom
 
-gridmap:
-    topic: local_gridmap
-    folder: local_gridmap
-
 #the base link of the vehicle (e.g. base_link, vehicle, etc.)
-vehicle_frame: vehicle 
-
-#camera intrinsics
-intrinsics:
-    K: [600., 0., 480., 0., 600., 300., 0., 0., 1.]
-    P: [600., 0., 480., 0., 600., 300., 0., 0., 1.]
-
-#transform from the vehicle link to the camera link
-extrinsics:
-    p: [-1.789, 1.966, -0.788]
-    q: [0.805, -0.212, 0.150, 0.534] #xyzw
+vehicle_frame: crl_rzr/base_link
 
 image_processing:
     -
         type: dino
         args:
-            # dino_type: radio_v2.5-l
-            # dino_layers: [6, 11, 16, 21]
-            # image_insize: [848, 448]
-
-            # dino_type: dinov2_vitl14_reg
-            # dino_layers: [5, 10, 15, 20]
             dino_type: dinov2_vitb14_reg
             dino_layers: [10]
             image_insize: [854, 448]
 
             desc_facet: value
-    # - 
-    #     type: pca
-    #     args:
-    #         fp: physics_atv_visual_mapping/pca/pca_vitb10_value.pt
-
-    # -
-    #     type: radio
-    #     args:
-    #         radio_type: radio_v2.5-l # radio_v2 e-radio_v2
-    #         image_insize: [672, 352]  # Original Image Size must be divisible by 16
-    #         # image_insize: [1344, 704]
 
     - 
         type: pca
@@ -71,14 +83,14 @@ localmapping:
     mapper_type: voxel
     layer_key: dino
     ema: 0.5 #higher->use recent more
-    n_features: 16
+    n_features: 3
     metadata:
         # origin: [-100., -100., -30.]
         # length: [200., 200., 60.]
         # resolution: [0.8, 0.8, 0.8]
         origin: [-50., -50., -10.]
         length: [100., 100., 20.]
-        resolution: [0.4, 0.4, 0.1]
+        resolution: [0.25, 0.25, 0.25]
         # origin: [-30., -30., -15.]
         # length: [60., 60., 30.]
         # resolution: [0.2, 0.2, 0.2]
@@ -151,7 +163,7 @@ terrain_estimation:
             mask_layer: min_elevation_filtered_inflated_mask
 
             itrs: 5   #num updates
-            alpha: 10. #weight on the measurement update
+            alpha: 1. #weight on the measurement update
             beta: 1.  #weight on the neighbor update
             lr: 0.05   #learning rate
 

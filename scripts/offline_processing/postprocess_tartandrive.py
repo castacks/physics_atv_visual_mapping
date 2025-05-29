@@ -1,6 +1,6 @@
 import os
 import yaml
-import tqdm
+import time
 import argparse
 
 import cv2
@@ -34,47 +34,30 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--run_dir", type=str, required=True, help="path to dataset")
     parser.add_argument("--config", type=str, required=True, help="path to config")
-    parser.add_argument(
-        "--odom", type=str, required=False, default="odom", help="name of odom folder"
-    )
-    parser.add_argument(
-        "--pcl", type=str, required=False, default="pcl", help="name of pcl folder"
-    )
-    parser.add_argument(
-        "--image",
-        type=str,
-        required=False,
-        default="image_left_color",
-        help="name of image folder",
-    )
-    parser.add_argument(
-        "--output_dir",
-        type=str,
-        required=False,
-        default="local_visual_map",
-        help="name of result folder",
-    )
-    parser.add_argument(
-        "--timestamp_check",
-        action="store_true",
-        help="set this flag to double-check timestamps on data",
-    )
+    parser.add_argument("--pc_in_local", action='store_true', help="set this flag if pc in local frame")
     args = parser.parse_args()
 
     config = yaml.safe_load(open(args.config, "r"))
 
-    # setup io
-    os.makedirs(os.path.join(args.run_dir, args.output_dir), exist_ok=True)
+    #setup proj stuff
+    image_keys = list(config['images'].keys())
+    image_intrinsics = []
+    image_extrinsics = []
 
-    intrinsics = (
-        torch.tensor(config["intrinsics"]["K"]).reshape(3, 3).to(config["device"])
-    )
-    extrinsics = pose_to_htm(
-        np.concatenate(
-            [np.array(config["extrinsics"]["p"]), np.array(config["extrinsics"]["q"])],
-            axis=-1,
-        )
-    ).to(config["device"])
+    for ik in image_keys:
+        lidar_to_cam = np.concatenate([
+            np.array(config['images'][ik]['extrinsics']['p']),
+            np.array(config['images'][ik]['extrinsics']['q']),
+        ], axis=-1)
+        extrinsics = pose_to_htm(lidar_to_cam)
+
+        intrinsics = get_intrinsics(np.array(config['images'][ik]['intrinsics']['P']))
+
+        image_extrinsics.append(extrinsics)
+        image_intrinsics.append(intrinsics)
+
+    image_intrinsics = torch.stack(image_intrinsics, dim=0).to(config['device'])
+    image_extrinsics = torch.stack(image_extrinsics, dim=0).to(config['device'])
 
     image_pipeline = setup_image_pipeline(config)
 
@@ -94,7 +77,7 @@ if __name__ == "__main__":
         terrain_estimator = setup_terrain_estimation_pipeline(config)
 
     ## first create the trajectory interpolator
-    odom_dir = os.path.join(args.run_dir, args.odom)
+    odom_dir = os.path.join(args.run_dir, config['odometry']['folder'])
     poses = np.loadtxt(os.path.join(odom_dir, "data.txt"))
     pose_ts = np.loadtxt(os.path.join(odom_dir, "timestamps.txt"))
     mask = np.ones_like(pose_ts).astype(bool)
@@ -105,95 +88,127 @@ if __name__ == "__main__":
     traj_interp = TrajectoryInterpolator(pose_ts, poses, tol=0.5)
 
     ## next compute gridmap sample times
-    pcl_dir = os.path.join(args.run_dir, args.pcl)
-    image_dir = os.path.join(args.run_dir, args.image)
-
+    pcl_dir = os.path.join(args.run_dir, config['pointcloud']['folder'])
     pcl_ts = np.loadtxt(os.path.join(pcl_dir, "timestamps.txt"))
-    image_ts = np.loadtxt(os.path.join(image_dir, "timestamps.txt"))
 
-    # timestamp check
-    if args.timestamp_check:
-        x = np.arange(len(pose_ts))
-        plt.scatter(x, pose_ts, label="pose ({} samples)".format(pose_ts.shape[0]))
-        plt.scatter(x, pcl_ts, label="pcl ({} samples)".format(pcl_ts.shape[0]))
-        plt.scatter(x, image_ts, label="image ({} samples)".format(image_ts.shape[0]))
-        plt.legend()
-        plt.title("timestamp check (all colors should overlap)")
-        plt.show()
+    for pcl_idx in range(len(pcl_ts))[500:]:
+        pcl_fp = os.path.join(pcl_dir, "{:08d}.npy".format(pcl_idx))
+        pcl_t = pcl_ts[pcl_idx]        
 
-    # sync image times to pcl times (note that I'm choosing to break causality for accuracy)
-    image_to_pcl_tdiffs = np.abs(image_ts.reshape(1, -1) - pcl_ts.reshape(-1, 1))
-    pcl_idxs = np.argmin(image_to_pcl_tdiffs, axis=0)
-    pcl_errs = np.min(image_to_pcl_tdiffs, axis=0)
-
-    print(
-        "pcl->image timesync errs: mean: {:.4f}s, max: {:.4f}s".format(
-            pcl_errs.mean(), pcl_errs.max()
-        )
-    )
-
-    for ii in tqdm.tqdm(range(len(image_ts))):
-        pcl_fp = os.path.join(args.run_dir, args.pcl, "{:08d}.npy".format(pcl_idxs[ii]))
-        image_fp = os.path.join(args.run_dir, args.image, "{:08d}.png".format(ii))
-        img_t = image_ts[ii]
-
-        pose = traj_interp(img_t)
+        pose = traj_interp(pcl_t)
         pose = pose_to_htm(pose).to(config["device"])
 
         pcl = torch.from_numpy(np.load(pcl_fp)).float().to(config["device"])
-        img = cv2.imread(image_fp)
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB) / 255.0
-        img = torch.tensor(img).unsqueeze(0).permute(0, 3, 1, 2)
+        
+        if args.pc_in_local:
+            pcl_odom = transform_points(pcl.clone(), pose)
+            pcl_base = pcl.clone()
+        else:
+            pcl_odom = pcl.clone()
+            pcl_base = transform_points(pcl.clone(), torch.linalg.inv(pose))
 
-        feature_img, feature_intrinsics = image_pipeline.run(
-            img, intrinsics.unsqueeze(0)
+        ## setup images ##
+        images = []
+        for ii, ik in enumerate(image_keys):
+            img_dir = config['images'][ik]['folder']
+            img_fp = os.path.join(args.run_dir, img_dir, '{:08d}.png'.format(pcl_idx))
+            
+            img = cv2.imread(img_fp)
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB) / 255.0
+            img = torch.tensor(img).float().to(config['device'])
+            images.append(img)
+
+        images = torch.stack(images, dim=0)
+        images = images.permute(0, 3, 1, 2)
+
+        t1 = time.time()
+        feature_images, feature_intrinsics = image_pipeline.run(
+            images, image_intrinsics
         )
+        torch.cuda.synchronize()
+        t2 = time.time()
 
+        #re-calc projection matrices
+        image_Ps = []
+        for ii, ik in enumerate(image_keys):
+            img_dir = config['images'][ik]['folder']
+            img_ts = np.loadtxt(os.path.join(args.run_dir, img_dir, 'timestamps.txt'))
+            img_t = img_ts[pcl_idx]
+
+            # pre-multiply by the tf from pc odom to img odom
+            odom_pc_H = pose_to_htm(traj_interp(pcl_t)).to(config['device'])
+            odom_img_H = pose_to_htm(traj_interp(img_t)).to(config['device'])
+            pc_img_H = odom_img_H @ torch.linalg.inv(odom_pc_H)
+            E = pc_img_H @ image_extrinsics[ii]
+            I = feature_intrinsics[ii]
+            image_Ps.append(get_projection_matrix(I, E))
+        
+        image_Ps = torch.stack(image_Ps)
         # move back to channels-last
-        feature_img = feature_img[0].permute(1, 2, 0)
-        feature_intrinsics = feature_intrinsics[0]
+        feature_images = feature_images.permute(0, 2, 3, 1)
 
-        I = get_intrinsics(feature_intrinsics).to(config["device"])
-        E = get_extrinsics(extrinsics).to(config["device"])
+        t3 = time.time()
+        coords, valid_mask = get_pixel_projection(pcl_base[:, :3], image_Ps, feature_images)
+        pc_features, cnt = colorize(coords, valid_mask, feature_images)
+        torch.cuda.synchronize()
+        t4 = time.time()
 
-        P = obtain_projection_matrix(I, E)
+        pc_features = pc_features[cnt > 0]
+        feature_pcl = FeaturePointCloudTorch.from_torch(pts=pcl_odom, features=pc_features, mask=(cnt > 0))
 
-        pc_in_base = transform_points(pcl.clone(), torch.linalg.inv(pose))
-
-        pixel_coordinates = get_pixel_from_3D_source(pc_in_base[:, :3], P)
-        (
-            lidar_points_in_frame,
-            pixels_in_frame,
-            ind_in_frame,
-        ) = get_points_and_pixels_in_frame(
-            pc_in_base[:, :3], pixel_coordinates, feature_img.shape[0], feature_img.shape[1]
-        )
-
-        feature_features = bilinear_interpolation(pixels_in_frame[..., [1,0]], feature_img)
-        feature_pcl = torch.cat([pcl[ind_in_frame][:, :3], feature_features], dim=-1)
-
-        mask = ~torch.ones(pcl.shape[0], dtype=torch.bool, device=config["device"])
-        mask[ind_in_frame] = True
-        feature_pcl = FeaturePointCloudTorch.from_torch(pts=pcl, features=feature_features, mask=mask)
-
+        t5 = time.time()
         localmapper.update_pose(pose[:3, -1])
         localmapper.add_feature_pc(pos=pose[:3, -1], feat_pc=feature_pcl, do_raytrace=False)
 
         if do_terrain_estimation:
             bev_features = terrain_estimator.run(localmapper.voxel_grid)
-            torch.cuda.synchronize()
-   
-        if (ii+1) % 50 == 0:
-            # localmapper.bev_grid.visualize();plt.show()
-            localmapper.voxel_grid.visualize()
+        
+        torch.cuda.synchronize()
+        t6 = time.time()
 
-            fig, axs = plt.subplots(4, 4, figsize=(16, 16))
-            axs = axs.flatten()
-            for i in range(min(len(axs), len(bev_features.feature_keys))):
-                k = bev_features.feature_keys[i]
-                data = bev_features.data[..., i]
-                axs[i].imshow(data.T.cpu().numpy(), origin='lower', cmap='jet', interpolation='none')
-                axs[i].set_title(k)
+        print('_' * 30)
+        print('VFM proc took {:.4f}s'.format(t2-t1))
+        print('colorize took {:.4f}s'.format(t4-t3))
+        print('mapping took  {:.4f}s'.format(t6-t5))
 
-            fig.suptitle('showing 16 of {} features'.format(len(bev_features.feature_keys)))
+        ## viz code ##
+        if (pcl_idx+1) % 50 == 0:
+            ## viz proj ##
+            ni = len(images)
+            nax = ni+2
+            fig, axs = plt.subplots(2, nax, figsize=(10*nax, 10*2))
+
+            pcl = pcl_base.cpu().numpy()
+            pcl_dists = np.linalg.norm(pcl, axis=-1)
+
+            axs[0, 0].scatter(pcl[:, 0], pcl[:, 1], c=pcl[:, 2], cmap='jet', s=1.)
+            axs[0, 0].set_title('pc orig')
+
+            cs = 'rgbcmyk'
+            for ik, ilabel in enumerate(image_keys):
+                coors = coords[ik].cpu().numpy()
+                vmask = valid_mask[ik].cpu().numpy()
+                axs[0, 1+ik].scatter(pcl[vmask, 0], pcl[vmask, 1], c=pcl[vmask, 2], cmap='jet', s=1.)
+                axs[0, 1+ik].set_title('pts in {}'.format(ilabel))
+
+                axs[0, -1].scatter(pcl[vmask, 0], pcl[vmask, 1], c=cs[ik], label=ilabel, s=1.)
+
+                axs[1, 1+ik].imshow(normalize_dino(feature_images[ik]).cpu().numpy())
+                axs[1, 1+ik].scatter(coors[vmask, 0], coors[vmask, 1], s=1., cmap='jet', c=pcl_dists[vmask])
+                axs[1, 1+ik].set_title(ilabel)
+
+            for ax in axs[0]:
+                ax.set_aspect(1.)
+
+            axs[0, -1].legend()
+
             plt.show()
+
+            #viz pc
+            import open3d as o3d
+            pc_viz = o3d.geometry.PointCloud()
+            pc_viz.points = o3d.utility.Vector3dVector(pcl_base[cnt > 0].cpu().numpy())
+            pc_viz.colors = o3d.utility.Vector3dVector(normalize_dino(pc_features).cpu().numpy())
+            o3d.visualization.draw_geometries([pc_viz])
+
+            localmapper.voxel_grid.visualize()

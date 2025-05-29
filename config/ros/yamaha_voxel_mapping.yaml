@@ -23,13 +23,13 @@ vehicle_frame: vehicle
 
 #camera intrinsics
 intrinsics:
-    K: [455.7750, 0., 497.1180, 0., 456.3191, 251.8580, 0., 0., 1.]
-    P: [455.7750, 0., 497.1180, 0., 456.3191, 251.8580, 0., 0., 1.]
+    K: [960., 0., 960., 0., 960., 540., 0., 0., 1.]
+    P: [960., 0., 960., 0., 960., 540., 0., 0., 1.]
 
 #transform from the vehicle link to the camera link
 extrinsics:
-    p: [0.17265, -0.15227, 0.05708]
-    q: [0.55940, -0.54718, 0.44603, 0.43442]
+    p: [0.103, 0.135, 0.003]
+    q: [-0.386, -0.386, -0.598, 0.587] #xyzw
 
 image_processing:
     -
@@ -78,7 +78,7 @@ localmapping:
         # resolution: [0.8, 0.8, 0.8]
         origin: [-50., -50., -10.]
         length: [100., 100., 20.]
-        resolution: [0.4, 0.4, 0.1]
+        resolution: [0.25, 0.25, 0.25]
         # origin: [-30., -30., -15.]
         # length: [60., 60., 30.]
         # resolution: [0.2, 0.2, 0.2]
@@ -151,7 +151,7 @@ terrain_estimation:
             mask_layer: min_elevation_filtered_inflated_mask
 
             itrs: 5   #num updates
-            alpha: 10. #weight on the measurement update
+            alpha: 1. #weight on the measurement update
             beta: 1.  #weight on the neighbor update
             lr: 0.05   #learning rate
 

@@ -90,7 +90,7 @@ if __name__ == "__main__":
 
         print("found {} valid pcl-image pairs".format(pcl_valid_mask.sum()))
 
-        for pcl_idx in pcl_valid_idxs[::100]:
+        for pcl_idx in pcl_valid_idxs[::10]:
             pcl_fp = os.path.join(pcl_dir, "{:08d}.npy".format(pcl_idx))
             pcl = torch.from_numpy(np.load(pcl_fp)).to(config["device"]).float()
             pcl_t = pcl_ts[pcl_idx]
@@ -126,6 +126,10 @@ if __name__ == "__main__":
             ) = get_points_and_pixels_in_frame(
                 pcl, pcl_pixel_coords, img.shape[0], img.shape[1]
             )
+
+            torch.set_printoptions(sci_mode=False)
+            print('I = {},\nE = {},\nP = {}'.format(intrinsics, extrinsics, P))
+            print('pc mean = {}'.format(pcl.mean(dim=0)))
 
             pcl_px_in_frame = pcl_pixel_coords[ind_in_frame]
             pcl_dists = pcl_dists[ind_in_frame]

@@ -102,28 +102,28 @@ if __name__ == '__main__':
     #     'device': 'cuda'
     # }
 
-    # vitl
-    dino_args = {
-        'dino_dir': dino_dir,
-        'dino_model': 'dinov2_vitl14_reg',
-        'layers': [8, 12, 16, 20],
-        # 'input_size': [686 * 2, 364 * 2],
-        # 'input_size': [686, 364],
-        'input_size': [854, 448],
-        'facet': 'value',
-        'device': 'cuda'
-    }
-
-    # radio
+    # # vitl
     # dino_args = {
-    #     'dino_dir': radio_dir,
-    #     'dino_model': 'radio_v2.5-l',
-    #     'layers': [9, 13, 17, 21],
-    #     # 'input_size': [672, 352],
-    #     'input_size': [848, 448],
+    #     'dino_dir': dino_dir,
+    #     'dino_model': 'dinov2_vitl14_reg',
+    #     'layers': [8, 12, 16, 20],
+    #     # 'input_size': [686 * 2, 364 * 2],
+    #     # 'input_size': [686, 364],
+    #     'input_size': [854, 448],
     #     'facet': 'value',
     #     'device': 'cuda'
     # }
+
+    # radio
+    dino_args = {
+        'dino_dir': radio_dir,
+        'dino_model': 'radio_v2.5-l',
+        'layers': [9, 13, 17, 21],
+        # 'input_size': [672, 352],
+        'input_size': [848, 448],
+        'facet': 'value',
+        'device': 'cuda'
+    }
 
     dino = DinoV2ExtractFeatures(**dino_args)
 

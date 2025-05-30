@@ -14,7 +14,7 @@ from physics_atv_visual_mapping.image_processing.image_pipeline import (
     setup_image_pipeline,
 )
 from physics_atv_visual_mapping.pointcloud_colorization.torch_color_pcl_utils import *
-from physics_atv_visual_mapping.utils import pose_to_htm, transform_points
+from physics_atv_visual_mapping.utils import pose_to_htm, transform_points, normalize_dino
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -37,18 +37,27 @@ if __name__ == "__main__":
     config = yaml.safe_load(open(args.config, "r"))
     print(config)
 
-    ##get extrinsics and intrinsics
-    lidar_to_cam = np.concatenate(
-        [
-            np.array(config["extrinsics"]["p"]),
-            np.array(config["extrinsics"]["q"]),
-        ],
-        axis=-1,
-    )
-    extrinsics = pose_to_htm(lidar_to_cam)
+     #setup proj stuff
+    image_keys = list(config['images'].keys())
+    image_intrinsics = []
+    image_extrinsics = []
 
-    intrinsics = get_intrinsics(torch.tensor(config["intrinsics"]["K"]).reshape(3, 3))
-    # dont combine because we need to recalculate given dino
+    for ik in image_keys:
+        lidar_to_cam = np.concatenate([
+            np.array(config['images'][ik]['extrinsics']['p']),
+            np.array(config['images'][ik]['extrinsics']['q']),
+        ], axis=-1)
+        extrinsics = pose_to_htm(lidar_to_cam)
+
+        intrinsics = get_intrinsics(np.array(config['images'][ik]['intrinsics']['P']))
+
+        image_extrinsics.append(extrinsics)
+        image_intrinsics.append(intrinsics)
+
+    image_intrinsics = torch.stack(image_intrinsics, dim=0).to(config['device'])
+    image_extrinsics = torch.stack(image_extrinsics, dim=0).to(config['device'])
+
+    image_Ps = get_projection_matrix(image_intrinsics, image_extrinsics).to(config["device"])
 
     #if config already has a pca, remove it.
     image_processing_config = []
@@ -60,7 +69,7 @@ if __name__ == "__main__":
 
     config['image_processing'] = image_processing_config
 
-    pipeline = setup_image_pipeline(config)
+    image_pipeline = setup_image_pipeline(config)
 
     dino_buf = []
 
@@ -75,14 +84,14 @@ if __name__ == "__main__":
     for ddir in run_dirs:
         odom_dir = os.path.join(ddir, config["odometry"]["folder"])
         poses = np.loadtxt(os.path.join(odom_dir, "data.txt"))
-        N_samples += poses.shape[0]
+        N_samples += poses.shape[0] * len(image_keys)
 
     n_frames = min(args.n_frames, N_samples)
     proc_every = int(N_samples / n_frames)
 
     print("computing for {} run dirs ({} samples, proc every {}th frame.)".format(len(run_dirs), N_samples, proc_every))
 
-    for ddir in tqdm.tqdm(run_dirs):
+    for ddir in run_dirs:
         odom_dir = os.path.join(ddir, config["odometry"]["folder"])
         poses = np.loadtxt(os.path.join(odom_dir, "data.txt"))
         pose_ts = np.loadtxt(os.path.join(odom_dir, "timestamps.txt"))
@@ -92,99 +101,70 @@ if __name__ == "__main__":
 
         traj_interp = TrajectoryInterpolator(pose_ts, poses)
 
-        img_dir = os.path.join(ddir, config["image"]["folder"])
-        img_ts = np.loadtxt(os.path.join(img_dir, "timestamps.txt"))
-
         pcl_dir = os.path.join(ddir, config["pointcloud"]["folder"])
         pcl_ts = np.loadtxt(os.path.join(pcl_dir, "timestamps.txt"))
 
-        pcl_img_dists = np.abs(img_ts.reshape(1, -1) - pcl_ts.reshape(-1, 1))
-        pcl_img_mindists = np.min(pcl_img_dists, axis=-1)
-        pcl_img_argmin = np.argmin(pcl_img_dists, axis=-1)
+        for pcl_idx in range(len(pcl_ts))[10::proc_every]:
+            pcl_fp = os.path.join(pcl_dir, "{:08d}.npy".format(pcl_idx))
+            pcl_t = pcl_ts[pcl_idx]        
 
-        pcl_valid_mask = (
-            (pcl_ts > pose_ts[0]) & (pcl_ts < pose_ts[-1]) & (pcl_img_mindists < 0.1)
-        )
-        pcl_valid_idxs = np.argwhere(pcl_valid_mask).flatten()
+            pose = traj_interp(pcl_t)
+            pose = pose_to_htm(pose).to(config["device"])
 
-        print("found {} valid pcl-image pairs".format(pcl_valid_mask.sum()))
+            pcl = torch.from_numpy(np.load(pcl_fp)).float().to(config["device"])
+            
+            if args.pc_in_local:
+                pcl_odom = transform_points(pcl.clone(), pose)
+                pcl_base = pcl.clone()
+            else:
+                pcl_odom = pcl.clone()
+                pcl_base = transform_points(pcl.clone(), torch.linalg.inv(pose))
 
-        for pcl_idx in tqdm.tqdm(pcl_valid_idxs):
-            if pcl_idx % proc_every == 0:
-                pcl_fp = os.path.join(pcl_dir, "{:08d}.npy".format(pcl_idx))
-                pcl_t = pcl_ts[pcl_idx]
-                pcl = torch.from_numpy(np.load(pcl_fp)).to(config["device"]).float()
-
-                if not args.pc_in_local:
-                    pose = traj_interp(pcl_t)
-                    H = pose_to_htm(pose).to(config["device"]).float()
-                    pcl = transform_points(pcl, torch.linalg.inv(H))
-
-                pcl_dists = torch.linalg.norm(pcl[:, :3], dim=-1)
-                pcl_mask = (pcl_dists > args.pc_lim[0]) & (
-                    pcl_dists < args.pc_lim[1]
-                )
-                pcl = pcl[pcl_mask]
-
-                pcl = pcl[:, :3]  # assume first three are [x,y,z]
-
-                img_idx = pcl_img_argmin[pcl_idx]
-                img_fp = os.path.join(img_dir, "{:08d}.png".format(img_idx))
+            ## setup images ##
+            images = []
+            for ii, ik in enumerate(image_keys):
+                img_dir = config['images'][ik]['folder']
+                img_fp = os.path.join(ddir, img_dir, '{:08d}.png'.format(pcl_idx))
+                
                 img = cv2.imread(img_fp)
                 img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB) / 255.0
-                img = torch.tensor(img).permute(2, 0, 1).float()
+                img = torch.tensor(img).float().to(config['device'])
+                images.append(img)
 
-                dino_feats, dino_intrinsics = pipeline.run(
-                    img.unsqueeze(0), intrinsics.unsqueeze(0)
-                )
-                dino_feats = dino_feats[0].permute(1, 2, 0)
-                dino_intrinsics = dino_intrinsics[0]
+            images = torch.stack(images, dim=0)
+            images = images.permute(0, 3, 1, 2)
 
-                extent = (0, dino_feats.shape[1], 0, dino_feats.shape[0])
+            feature_images, feature_intrinsics = image_pipeline.run(
+                images, image_intrinsics
+            )
 
-                P = obtain_projection_matrix(dino_intrinsics, extrinsics).to(
-                    config["device"]
-                )
-                pcl_pixel_coords = get_pixel_from_3D_source(pcl, P)
-                (
-                    pcl_in_frame,
-                    pixels_in_frame,
-                    ind_in_frame,
-                ) = get_points_and_pixels_in_frame(
-                    pcl, pcl_pixel_coords, dino_feats.shape[0], dino_feats.shape[1]
-                )
+            #re-calc projection matrices
+            image_Ps = []
+            for ii, ik in enumerate(image_keys):
+                img_dir = config['images'][ik]['folder']
+                img_ts = np.loadtxt(os.path.join(ddir, img_dir, 'timestamps.txt'))
+                img_t = img_ts[pcl_idx]
 
-                #ok to just int cast here
-                pcl_pixel_coords = pcl_pixel_coords.long()
+                # pre-multiply by the tf from pc odom to img odom
+                odom_pc_H = pose_to_htm(traj_interp(pcl_t)).to(config['device'])
+                odom_img_H = pose_to_htm(traj_interp(img_t)).to(config['device'])
+                pc_img_H = odom_img_H @ torch.linalg.inv(odom_pc_H)
+                E = pc_img_H @ image_extrinsics[ii]
+                I = feature_intrinsics[ii]
+                image_Ps.append(get_projection_matrix(I, E))
+            
+            image_Ps = torch.stack(image_Ps)
+            # move back to channels-last
+            feature_images = feature_images.permute(0, 2, 3, 1)
 
-                pcl_px_in_frame = pcl_pixel_coords[ind_in_frame]
-                dino_idxs = pcl_px_in_frame.unique(
-                    dim=0
-                )  # only get feats with a lidar return
+            coords, valid_mask = get_pixel_projection(pcl_base[:, :3], image_Ps, feature_images)
 
-                # mask_dino_feats = dino_feats[dino_idxs[:, 1], dino_idxs[:, 0]]
+            for img, coors, vmask in zip(feature_images, coords, valid_mask):
+                coors = coors[vmask].long()
+                coors = torch.unique(coors, dim=0)
 
-                mask_dino_feats = dino_feats.view(-1, dino_feats.shape[-1]).cpu()
-                dino_buf.append(mask_dino_feats)
-
-            """
-            if pcl_idx % 100 == 0:
-                fig, axs = plt.subplots(1, 3)
-                dino_viz = dino_feats[..., :3]
-                vmin = dino_viz.view(-1, 3).min(dim=0)[0].view(1,1,3)
-                vmax = dino_viz.view(-1, 3).max(dim=0)[0].view(1,1,3)
-                dino_viz = (dino_viz-vmin)/(vmax-vmin)
-
-                axs[0].imshow(img.permute(1,2,0), extent=extent)
-                axs[0].imshow(dino_viz.cpu(), alpha=0.5, extent=extent)
-                axs[0].scatter(pcl_px_in_frame[:, 0].cpu(), dino_feats.shape[0]-pcl_px_in_frame[:, 1].cpu(), s=1., alpha=0.5)
-
-                mask = torch.zeros_like(dino_viz[..., 0])
-                mask[dino_idxs[:, 1], dino_idxs[:, 0]] = 1.
-                axs[1].imshow(mask.cpu())
-
-                plt.show()
-            """
+                feats = img[coors[:, 1], coors[:, 0]]
+                dino_buf.append(feats)
 
     dino_buf = torch.cat(dino_buf, dim=0)
     feat_mean = dino_buf.mean(dim=0)
@@ -224,6 +204,17 @@ if __name__ == "__main__":
     feat_mean = feat_mean.cuda()
     V = V.cuda()
 
+    #add new pca to config
+    pca_conf = {
+        'type': 'pca',
+        'args': {
+            'fp': args.save_to
+        }
+    }
+    config['image_processing'].append(pca_conf)
+
+    image_pipeline = setup_image_pipeline(config)
+
     ## viz loop ##
     for ddir in run_dirs:
         odom_dir = os.path.join(ddir, config["odometry"]["folder"])
@@ -235,103 +226,100 @@ if __name__ == "__main__":
 
         traj_interp = TrajectoryInterpolator(pose_ts, poses)
 
-        img_dir = os.path.join(ddir, config["image"]["folder"])
-        img_ts = np.loadtxt(os.path.join(img_dir, "timestamps.txt"))
-
         pcl_dir = os.path.join(ddir, config["pointcloud"]["folder"])
         pcl_ts = np.loadtxt(os.path.join(pcl_dir, "timestamps.txt"))
 
-        pcl_img_dists = np.abs(img_ts.reshape(1, -1) - pcl_ts.reshape(-1, 1))
-        pcl_img_mindists = np.min(pcl_img_dists, axis=-1)
-        pcl_img_argmin = np.argmin(pcl_img_dists, axis=-1)
-
-        pcl_valid_mask = (
-            (pcl_ts > pose_ts[0]) & (pcl_ts < pose_ts[-1]) & (pcl_img_mindists < 0.1)
-        )
-        pcl_valid_idxs = np.argwhere(pcl_valid_mask).flatten()
-
-        print("found {} valid pcl-image pairs".format(pcl_valid_mask.sum()))
-
-        for pcl_idx in pcl_valid_idxs[::100]:
+        for pcl_idx in np.random.choice(np.arange(len(pcl_ts)), size=(10,)):
             pcl_fp = os.path.join(pcl_dir, "{:08d}.npy".format(pcl_idx))
-            pcl = torch.from_numpy(np.load(pcl_fp)).to(config["device"]).float()
-            pcl_t = pcl_ts[pcl_idx]
+            pcl_t = pcl_ts[pcl_idx]        
 
-            if not args.pc_in_local:
-                pose = traj_interp(pcl_t)
-                H = pose_to_htm(pose).to(config["device"]).float()
-                pcl = transform_points(pcl, torch.linalg.inv(H))
+            pose = traj_interp(pcl_t)
+            pose = pose_to_htm(pose).to(config["device"])
 
-            pcl_dists = torch.linalg.norm(pcl[:, :3], dim=-1)
-            pcl_mask = (pcl_dists > args.pc_lim[0]) & (
-                pcl_dists < args.pc_lim[1]
-            )
-            pcl = pcl[pcl_mask]
+            pcl = torch.from_numpy(np.load(pcl_fp)).float().to(config["device"])
+            
+            if args.pc_in_local:
+                pcl_odom = transform_points(pcl.clone(), pose)
+                pcl_base = pcl.clone()
+            else:
+                pcl_odom = pcl.clone()
+                pcl_base = transform_points(pcl.clone(), torch.linalg.inv(pose))
 
-            pcl = pcl[:, :3]  # assume first three are [x,y,z]
+            ## setup images ##
+            images = []
+            for ii, ik in enumerate(image_keys):
+                img_dir = config['images'][ik]['folder']
+                img_fp = os.path.join(ddir, img_dir, '{:08d}.png'.format(pcl_idx))
+                
+                img = cv2.imread(img_fp)
+                img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB) / 255.0
+                img = torch.tensor(img).float().to(config['device'])
+                images.append(img)
 
-            img_idx = pcl_img_argmin[pcl_idx]
-            img_fp = os.path.join(img_dir, "{:08d}.png".format(img_idx))
-            img = cv2.imread(img_fp)
-            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB) / 255.0
-            img = torch.tensor(img).permute(2, 0, 1)
+            images = torch.stack(images, dim=0)
+            images = images.permute(0, 3, 1, 2)
 
-            dino_feats, dino_intrinsics = pipeline.run(
-                img.unsqueeze(0), intrinsics.unsqueeze(0)
-            )
-            dino_feats = dino_feats[0].permute(1, 2, 0)
-            dino_intrinsics = dino_intrinsics[0]
-
-            extent = (0, dino_feats.shape[1], 0, dino_feats.shape[0])
-
-            dino_feats_norm = dino_feats.view(
-                -1, dino_feats.shape[-1]
-            ) - feat_mean.view(1, -1)
-            dino_feats_pca = dino_feats_norm.unsqueeze(1) @ V.unsqueeze(0)
-            dino_feats = dino_feats_pca.view(
-                dino_feats.shape[0], dino_feats.shape[1], args.pca_nfeats
+            feature_images, feature_intrinsics = image_pipeline.run(
+                images, image_intrinsics
             )
 
-            P = obtain_projection_matrix(dino_intrinsics, extrinsics).to(
-                config["device"]
-            )
-            pcl_pixel_coords = get_pixel_from_3D_source(pcl, P)
-            (
-                pcl_in_frame,
-                pixels_in_frame,
-                ind_in_frame,
-            ) = get_points_and_pixels_in_frame(
-                pcl, pcl_pixel_coords, dino_feats.shape[0], dino_feats.shape[1]
-            )
+            #re-calc projection matrices
+            image_Ps = []
+            for ii, ik in enumerate(image_keys):
+                img_dir = config['images'][ik]['folder']
+                img_ts = np.loadtxt(os.path.join(ddir, img_dir, 'timestamps.txt'))
+                img_t = img_ts[pcl_idx]
 
-            #ok to just int cast here
-            pcl_pixel_coords = pcl_pixel_coords.long()
+                # pre-multiply by the tf from pc odom to img odom
+                odom_pc_H = pose_to_htm(traj_interp(pcl_t)).to(config['device'])
+                odom_img_H = pose_to_htm(traj_interp(img_t)).to(config['device'])
+                pc_img_H = odom_img_H @ torch.linalg.inv(odom_pc_H)
+                E = pc_img_H @ image_extrinsics[ii]
+                I = feature_intrinsics[ii]
+                image_Ps.append(get_projection_matrix(I, E))
+            
+            image_Ps = torch.stack(image_Ps)
+            # move back to channels-last
+            feature_images = feature_images.permute(0, 2, 3, 1)
+            images = images.permute(0, 2, 3, 1)
 
-            pcl_px_in_frame = pcl_pixel_coords[ind_in_frame]
-            dino_idxs = pcl_px_in_frame.unique(
-                dim=0
-            )  # only get feats with a lidar return
+            coords, valid_mask = get_pixel_projection(pcl_base[:, :3], image_Ps, feature_images)
+            img_masks = []
 
-            fig, axs = plt.subplots(2, 3, figsize=(32, 24))
-            axs = axs.flatten()
-            dino_viz = dino_feats[..., :9]
-            vmin = dino_viz.view(-1, 9).min(dim=0)[0].view(1, 1, 9)
-            vmax = dino_viz.view(-1, 9).max(dim=0)[0].view(1, 1, 9)
-            dino_viz = (dino_viz - vmin) / (vmax - vmin)
+            for img, coors, vmask in zip(feature_images, coords, valid_mask):
+                coors = coors[vmask].long()
+                coors = torch.unique(coors, dim=0)
+                mask = torch.zeros(img.shape[:2])
+                mask[coors[:, 1], coors[:, 0]] = 1.
 
-            img = img.permute(1, 2, 0).cpu().numpy()
+                img_masks.append(mask)
 
-            axs[0].imshow(img, extent=extent)
+            ni = len(images)
+            
+            fig, axs = plt.subplots(4, ni, figsize=(8 * ni, 5 * 3))
 
-            axs[1].imshow(img, extent=extent)
-            axs[1].imshow(dino_viz[..., :3].cpu(), alpha=0.5, extent=extent)
+            axs[0, 0].set_ylabel('Raw')
+            axs[1, 0].set_ylabel('PCA')
+            axs[1, 0].set_ylabel('Raw + PCA')
+            axs[2, 0].set_ylabel('Mask')
 
-            mask = torch.zeros_like(dino_viz[..., 0])
-            mask[dino_idxs[:, 1], dino_idxs[:, 0]] = 1.0
-            axs[2].imshow(mask.cpu())
+            for i in range(ni):
+                ilabel = image_keys[i]
+                raw_img = images[i].cpu().numpy()
+                feat_img = normalize_dino(feature_images[i]).cpu().numpy()
+                mask_img = img_masks[i].cpu().numpy()
 
-            axs[3].imshow(dino_viz[..., :3].cpu(), alpha=1.0, extent=extent)
-            axs[4].imshow(dino_viz[..., 3:6].cpu(), alpha=1.0, extent=extent)
-            axs[5].imshow(dino_viz[..., 6:].cpu(), alpha=1.0, extent=extent)
+                proj_extent = (0, feat_img.shape[1], 0, feat_img.shape[0])
+
+                axs[0, i].imshow(raw_img, extent=proj_extent)
+                axs[2, i].imshow(raw_img, extent=proj_extent)
+                axs[3, i].imshow(raw_img, extent=proj_extent)
+
+                axs[1, i].imshow(feat_img, extent=proj_extent)
+                axs[2, i].imshow(feat_img, extent=proj_extent, alpha=0.3)
+                
+                axs[2, i].imshow(mask_img, cmap='gray', extent=proj_extent, alpha=0.3)
+
+                axs[0, i].set_title(ilabel)
 
             plt.show()

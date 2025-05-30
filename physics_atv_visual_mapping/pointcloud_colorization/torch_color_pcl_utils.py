@@ -104,7 +104,6 @@ def get_projection_matrix(intrinsics, extrinsics):
         - P:
             3x4 camera projection matrix that transforms 3D points in "source" coordinate frame to 2D points in pixel space.
     """
-
     P = torch.matmul(intrinsics, extrinsics)
     P = P[..., :-1, :]
 

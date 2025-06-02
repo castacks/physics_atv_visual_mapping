@@ -146,7 +146,7 @@ def get_pixel_projection(points, P, images):
 
     return coords, valid_mask
 
-def colorize(pixel_coordinates, valid_mask, images, bilinear_interpolation=True):
+def colorize(pixel_coordinates, valid_mask, images, bilinear_interpolation=True, reduce=True):
     """
     get a set of features/colors for a set of pixel coordinats/images
 
@@ -155,12 +155,17 @@ def colorize(pixel_coordinates, valid_mask, images, bilinear_interpolation=True)
         valid_mask: [B x N] BoolTensor containing True if the N-th pt is visible in the B-th image
         images [B x W x H x C] FloatTensor of images
         bilinear_interpolation: If true, get feats w/ bilinear interpolation else truncate
+        reduce: change the output
 
     Returns:
-        features: [N x C] FloatTensor of features for each pixel.
-            If a pixel is in multiple images, we will average
-            If a pixel is in no images, we will pad with zeros
-        cnt: [N] LongTensor containing the amount of images the n-th pixel was in
+        if reduce=True:
+            features: [N x C] FloatTensor of features for each pixel.
+                If a pixel is in multiple images, we will average
+                If a pixel is in no images, we will pad with zeros
+            cnt: [N] LongTensor containing the amount of images the n-th pixel was in
+        if reduce=False:
+            features: [B x N x C] Float tensor containing the feature of the B-th image on the N-th coordinate
+            cnt: same as valid_mask
     """
     ni, ih, iw, ic = images.shape
 
@@ -198,9 +203,11 @@ def colorize(pixel_coordinates, valid_mask, images, bilinear_interpolation=True)
 
         interp_features[~valid_mask] = 0.
 
-        interp_features = interp_features.sum(dim=0) / (cnt + 1e-6).view(-1, 1)
-
-        return interp_features, cnt
+        if reduce:
+            interp_features = interp_features.sum(dim=0) / (cnt + 1e-6).view(-1, 1)
+            return interp_features, cnt
+        else:
+            return interp_features, valid_mask
 
     else:
         ixs = coords[..., 1].long()
@@ -210,9 +217,11 @@ def colorize(pixel_coordinates, valid_mask, images, bilinear_interpolation=True)
         features = images[ibs, ixs, iys]
         features[~valid_mask] = 0.
 
-        features = features.sum(dim=0) / (cnt + 1e-6).view(-1, 1)
-
-        return features, cnt
+        if reduce:
+            features = features.sum(dim=0) / (cnt + 1e-6).view(-1, 1)
+            return features, cnt
+        else:
+            return features, valid_mask
 
 def bilinear_interpolation(pixel_coordinates, image):
     """

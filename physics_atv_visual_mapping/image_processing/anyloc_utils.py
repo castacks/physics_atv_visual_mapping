@@ -47,6 +47,7 @@ class DinoV2ExtractFeatures:
         facet: _DINO_FACETS = "token",
         use_cls=False,
         norm_descs=True,
+        stride=-1,
         device: str = "cpu",
     ) -> None:
         """
@@ -119,6 +120,11 @@ class DinoV2ExtractFeatures:
         elif "radio" in dino_model:
             self.output_size = (int(input_size[0] / 16), int(input_size[1] / 16))
 
+        if stride > 0:
+            inp_0 = np.floor(((input_size[0] - 14)/stride) + 1)
+            inp_1 = np.floor(((input_size[1] - 14)/stride) + 1)
+            self.output_size = (int(inp_0),int(inp_1))
+
     def _generate_forward_hook(self, li):
         def _forward_hook(module, inputs, output):
             self._hook_out[li] = output
@@ -139,7 +145,7 @@ class DinoV2ExtractFeatures:
         )
         return img
 
-    @torch.compile
+    # @torch.compile
     def __call__(self, img: torch.Tensor) -> torch.Tensor:
         """
         Parameters:

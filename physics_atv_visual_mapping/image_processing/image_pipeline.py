@@ -1,12 +1,9 @@
 import torch
 import numpy as np
 
-from physics_atv_visual_mapping.image_processing.processing_blocks.dino import (
-    Dinov2Block,
-)
-from physics_atv_visual_mapping.image_processing.processing_blocks.radio import (
-    RadioBlock,
-)
+from physics_atv_visual_mapping.image_processing.processing_blocks.dino import Dinov2Block
+from physics_atv_visual_mapping.image_processing.processing_blocks.dino_upsample import UpsampleDinov2Block
+from physics_atv_visual_mapping.image_processing.processing_blocks.radio import RadioBlock
 from physics_atv_visual_mapping.image_processing.processing_blocks.pca import PCABlock
 from physics_atv_visual_mapping.image_processing.processing_blocks.vlad import VLADBlock
 from physics_atv_visual_mapping.image_processing.processing_blocks.pca_vlad import (
@@ -27,6 +24,8 @@ def setup_image_pipeline(config):
         block_config["args"]["device"] = config["device"]
         if btype == "dino":
             block = Dinov2Block(**block_config["args"], models_dir=config["models_dir"])
+        elif btype == "upsample_dino":
+            block = UpsampleDinov2Block(**block_config["args"], models_dir=config["models_dir"])
         elif btype == "sam":
             block = SAMBlock(**block_config["args"], models_dir=config["models_dir"])
         elif btype == "radio":

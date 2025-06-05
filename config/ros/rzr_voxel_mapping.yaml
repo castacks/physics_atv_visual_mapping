@@ -5,7 +5,7 @@ images:
         image_topic: /multisense/left/image_rect_color
         camera_info_topic: /multisense/left/camera_info
         image_compressed: False
-        folder: image_left_color
+        folder: image_left
 
         #camera intrinsics
         intrinsics:
@@ -21,7 +21,7 @@ images:
         image_topic: /multisense/left/image_rect_color
         camera_info_topic: /multisense/left/camera_info
         image_compressed: False
-        folder: image_front_color
+        folder: image_front
 
        #camera intrinsics
         intrinsics:
@@ -37,7 +37,7 @@ images:
         image_topic: /multisense/left/image_rect_color
         camera_info_topic: /multisense/left/camera_info
         image_compressed: False
-        folder: image_right_color
+        folder: image_right
 
         #camera intrinsics
         intrinsics:
@@ -51,11 +51,11 @@ images:
 
 pointcloud:
    topic: /superodometry/velodyne_cloud_registered
-   folder: merged_points_base
+   folder: pointcloud_in_vehicle
 
 odometry:
     topic: /superodometry/integrated_to_init
-    folder: odom
+    folder: odometry
 
 #the base link of the vehicle (e.g. base_link, vehicle, etc.)
 vehicle_frame: crl_rzr/base_link

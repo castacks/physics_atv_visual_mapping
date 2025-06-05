@@ -91,7 +91,7 @@ if __name__ == "__main__":
     pcl_dir = os.path.join(args.run_dir, config['pointcloud']['folder'])
     pcl_ts = np.loadtxt(os.path.join(pcl_dir, "timestamps.txt"))
 
-    for pcl_idx in range(len(pcl_ts))[500:]:
+    for pcl_idx in range(len(pcl_ts))[0:]:
         pcl_fp = os.path.join(pcl_dir, "{:08d}.npy".format(pcl_idx))
         pcl_t = pcl_ts[pcl_idx]        
 

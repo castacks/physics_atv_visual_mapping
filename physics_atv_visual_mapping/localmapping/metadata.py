@@ -6,15 +6,15 @@ class LocalMapperMetadata:
 
     def __init__(self, origin, length, resolution, device="cpu"):
         self.origin = (
-            origin if isinstance(origin, torch.Tensor) else torch.tensor(origin)
+            origin if isinstance(origin, torch.Tensor) else torch.tensor(origin, device=device)
         )
         self.length = (
-            length if isinstance(length, torch.Tensor) else torch.tensor(length)
+            length if isinstance(length, torch.Tensor) else torch.tensor(length, device=device)
         )
         self.resolution = (
             resolution
             if isinstance(resolution, torch.Tensor)
-            else torch.tensor(resolution)
+            else torch.tensor(resolution, device=device)
         )
         self.N = torch.round(self.length / self.resolution).long()
         self.ndims = self.origin.shape[0]

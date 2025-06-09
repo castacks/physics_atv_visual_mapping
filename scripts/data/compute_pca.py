@@ -297,6 +297,8 @@ if __name__ == "__main__":
             ni = len(images)
             
             fig, axs = plt.subplots(4, ni, figsize=(8 * ni, 5 * 3))
+            if ni == 1:
+                axs = axs.reshape(4, 1)
 
             axs[0, 0].set_ylabel('Raw')
             axs[1, 0].set_ylabel('PCA')

@@ -1,18 +1,30 @@
 models_dir: /home/tartandriver/tartandriver_ws/models #necessary to include this for non-ROS offline proc
 
-image:
-    image_topic: /multisense/left/image_rect_color
-    camera_info_topic: /multisense/left/camera_info
-    image_compressed: False
-    folder: image_left_color
+images:
+    image_left_color:
+        image_topic: /multisense/left/image_rect_color
+        camera_info_topic: /multisense/left/camera_info
+        image_compressed: False
+        folder: image
+
+        #camera intrinsics
+        intrinsics:
+            K: [455.7750, 0., 497.1180, 0., 456.3191, 251.8580, 0., 0., 1.]
+            P: [455.7750, 0., 497.1180, 0., 456.3191, 251.8580, 0., 0., 1.]
+
+        #transform from the vehicle link to the camera link
+        extrinsics:
+            p: [0.17265, -0.15227, 0.05708]
+            q: [0.55940, -0.54718, 0.44603, 0.43442]
+
 
 pointcloud:
    topic: /superodometry/velodyne_cloud_registered
-   folder: merged_points_base
+   folder: pointcloud_in_odom
 
 odometry:
     topic: /superodometry/integrated_to_init
-    folder: odom
+    folder: odometry
 
 gridmap:
     topic: local_gridmap
@@ -21,29 +33,17 @@ gridmap:
 #the base link of the vehicle (e.g. base_link, vehicle, etc.)
 vehicle_frame: vehicle 
 
-#camera intrinsics
-intrinsics:
-    K: [600., 0., 480., 0., 600., 300., 0., 0., 1.]
-    P: [600., 0., 480., 0., 600., 300., 0., 0., 1.]
-
-#transform from the vehicle link to the camera link
-extrinsics:
-    p: [-1.789, 1.966, -0.788]
-    q: [0.805, -0.212, 0.150, 0.534] #xyzw
-
 image_processing:
     -
         type: dino
         args:
-            # dino_type: radio_v2.5-l
-            # dino_layers: [6, 11, 16, 21]
-            # image_insize: [848, 448]
+            # dino_type: dinov2_vitb14_reg
+            # dino_layers: [10]
+            # image_insize: [854, 448]
 
-            # dino_type: dinov2_vitl14_reg
-            # dino_layers: [5, 10, 15, 20]
-            dino_type: dinov2_vitb14_reg
-            dino_layers: [10]
-            image_insize: [854, 448]
+            dino_type: radio_v2.5-b
+            dino_layers: [11]
+            image_insize: [848, 448]
 
             desc_facet: value
     # - 
@@ -63,7 +63,7 @@ image_processing:
         args:
             # fp: physics_atv_visual_mapping/pca/radio_v2.5-b_64_renegade_ridge.pt
             # fp: physics_atv_visual_mapping/pca/radio_v2.5b_64_gascola_20250124.pt
-            fp: physics_atv_visual_mapping/pca/vitb_reg_64_gascola_veg.pt
+            fp: physics_atv_visual_mapping/pca/new_radiob.pt
             # fp: physics_atv_visual_mapping/pca/dino_vitl_multi_64_gascola_veg.pt
 
 # voxel
@@ -71,7 +71,7 @@ localmapping:
     mapper_type: voxel
     layer_key: dino
     ema: 0.5 #higher->use recent more
-    n_features: 16
+    n_features: 64
     metadata:
         # origin: [-100., -100., -30.]
         # length: [200., 200., 60.]

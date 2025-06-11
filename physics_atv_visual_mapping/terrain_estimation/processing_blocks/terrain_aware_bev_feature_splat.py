@@ -7,12 +7,13 @@ class TerrainAwareBEVFeatureSplat(TerrainEstimationBlock):
     """
     Compute a per-cell min and max height
     """
-    def __init__(self, voxel_metadata, voxel_n_features, terrain_layer, terrain_mask_layer, output_key, overhang, device):
+    def __init__(self, voxel_metadata, voxel_n_features, terrain_layer, terrain_mask_layer, output_key, overhang, reduce='mean', device='cpu'):
         super().__init__(voxel_metadata, voxel_n_features, device)
         self.terrain_layer = terrain_layer
         self.terrain_mask_layer = terrain_mask_layer
         self.output_key = output_key
         self.overhang = overhang
+        self.reduce = reduce
         
     def to(self, device):
         self.device = device
@@ -45,7 +46,7 @@ class TerrainAwareBEVFeatureSplat(TerrainEstimationBlock):
     
         num_cells = (bev_grid.metadata.N[0] * bev_grid.metadata.N[1]).item()
 
-        bev_features = torch_scatter.scatter(src=features_to_scatter, index=idxs_to_scatter, dim_size=num_cells, dim=0, reduce='mean')
+        bev_features = torch_scatter.scatter(src=features_to_scatter, index=idxs_to_scatter, dim_size=num_cells, dim=0, reduce=self.reduce)
         bev_features = bev_features.view(*bev_grid.metadata.N, self.voxel_n_features)
 
         bev_feature_idxs = [bev_grid.feature_keys.index(k) for k in self.output_keys]

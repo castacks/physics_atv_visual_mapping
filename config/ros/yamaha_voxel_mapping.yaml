@@ -43,7 +43,8 @@ image_processing:
 
             dino_type: radio_v2.5-b
             dino_layers: [11]
-            image_insize: [848, 448]
+            # image_insize: [848, 448]
+            image_insize: [1696, 896]
 
             desc_facet: value
     # - 

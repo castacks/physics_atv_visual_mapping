@@ -397,7 +397,9 @@ class VoxelGrid:
 
         pc.points = o3d.utility.Vector3dVector(pts.cpu().numpy())
         pc.colors = o3d.utility.Vector3dVector(colors.cpu().numpy())
-        o3d.visualization.draw_geometries([pc])
+
+        return pc
+        # o3d.visualization.draw_geometries([pc])
 
     def to(self, device):
         self.device = device

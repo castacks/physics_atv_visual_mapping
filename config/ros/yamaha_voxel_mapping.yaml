@@ -37,14 +37,14 @@ image_processing:
     -
         type: dino
         args:
-            # dino_type: dinov2_vitb14_reg
-            # dino_layers: [10]
-            # image_insize: [854, 448]
+            dino_type: dinov2_vitb14_reg
+            dino_layers: [10]
+            image_insize: [854, 448]
 
-            dino_type: radio_v2.5-b
-            dino_layers: [11]
+            # dino_type: radio_v2.5-b
+            # dino_layers: [11]
             # image_insize: [848, 448]
-            image_insize: [1696, 896]
+            # image_insize: [1696, 896]
 
             desc_facet: value
     # - 
@@ -62,10 +62,8 @@ image_processing:
     - 
         type: pca
         args:
-            # fp: physics_atv_visual_mapping/pca/radio_v2.5-b_64_renegade_ridge.pt
-            # fp: physics_atv_visual_mapping/pca/radio_v2.5b_64_gascola_20250124.pt
-            fp: physics_atv_visual_mapping/pca/new_radiob.pt
-            # fp: physics_atv_visual_mapping/pca/dino_vitl_multi_64_gascola_veg.pt
+            # fp: physics_atv_visual_mapping/pca/new_radiob.pt
+            fp: physics_atv_visual_mapping/pca/vitb_reg_64_gascola_veg.pt
 
 # voxel
 localmapping:

@@ -13,6 +13,7 @@ from physics_atv_visual_mapping.terrain_estimation.processing_blocks.slope impor
 from physics_atv_visual_mapping.terrain_estimation.processing_blocks.terrain_diff import TerrainDiff
 from physics_atv_visual_mapping.terrain_estimation.processing_blocks.bev_feature_splat import BEVFeatureSplat
 from physics_atv_visual_mapping.terrain_estimation.processing_blocks.terrain_aware_bev_feature_splat import TerrainAwareBEVFeatureSplat
+from physics_atv_visual_mapping.terrain_estimation.processing_blocks.traversability_prototype_scores import TraversabilityPrototypeScore
 
 def setup_terrain_estimation_pipeline(config):
     blocks = []
@@ -47,6 +48,8 @@ def setup_terrain_estimation_pipeline(config):
             block = BEVFeatureSplat(**block_config["args"])
         elif btype == "terrain_aware_bev_feature_splat":
             block = TerrainAwareBEVFeatureSplat(**block_config["args"])
+        elif btype == "traversability_prototype_scores":
+            block = TraversabilityPrototypeScore(**block_config["args"])
         else:
             print('unknown terrain estimation block type {}'.format(btype))
             exit(1)

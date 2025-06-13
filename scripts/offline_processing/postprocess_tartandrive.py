@@ -149,7 +149,13 @@ if __name__ == "__main__":
 
         t3 = time.time()
         coords, valid_mask = get_pixel_projection(pcl_base[:, :3], image_Ps, feature_images)
-        pc_features, cnt = colorize(coords, valid_mask, feature_images)
+
+        valid_mask2 = cleanup_projection(pcl_base[:, :3], coords, valid_mask, feature_images)
+        valid_mask3 = valid_mask & valid_mask2
+
+        pc_features, cnt = colorize(coords, valid_mask3, feature_images)
+        # pc_features, cnt = colorize(coords, valid_mask, feature_images)
+
         torch.cuda.synchronize()
         t4 = time.time()
 

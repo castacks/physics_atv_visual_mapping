@@ -375,7 +375,7 @@ class VoxelGrid:
 
         return torch.stack([xs, ys, zs], axis=-1)
 
-    def visualize(self, viz_all=True):
+    def visualize(self, viz_all=True, sample_frac=1.0):
         pc = o3d.geometry.PointCloud()
         pts = self.grid_indices_to_pts(
             self.raster_indices_to_grid_indices(self.feature_raster_indices)
@@ -397,6 +397,9 @@ class VoxelGrid:
 
         pc.points = o3d.utility.Vector3dVector(pts.cpu().numpy())
         pc.colors = o3d.utility.Vector3dVector(colors.cpu().numpy())
+
+        if sample_frac < 1.0:
+            pc = pc.uniform_down_sample(every_k_points=int(1/sample_frac))
 
         return pc
         # o3d.visualization.draw_geometries([pc])

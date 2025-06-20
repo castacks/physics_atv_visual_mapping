@@ -15,6 +15,9 @@ DEG_2_RAD = PI/180.
 RAD_2_DEG = 180./PI
 
 def normalize_dino(img, return_min_max=False):
+    if img.numel() == 0:
+        return img[..., :3]
+
     _img = img[..., :3]
     _ndims = len(img.shape) - 1
     _dims = [1] * _ndims + [3]

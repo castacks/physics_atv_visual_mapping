@@ -115,7 +115,7 @@ def get_pixel_projection(points, P, images):
         onto a set of images
 
     Args:
-        points: [Nx3] FloatTensor of points
+        points: [N x 3] FloatTensor of points
         P: [B x 3 x 4] Projection matrix for each image
         images [B x W x H x C] FloatTensor of images
 

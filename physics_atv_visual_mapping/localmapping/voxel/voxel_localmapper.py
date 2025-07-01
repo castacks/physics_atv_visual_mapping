@@ -37,7 +37,7 @@ class VoxelLocalMapper(LocalMapper):
         self.voxel_grid.shift(px_shift)
         self.metadata.origin = new_origin
 
-    def add_feature_pc(self, pos: torch.Tensor, feat_pc: FeaturePointCloudTorch, do_raytrace=False, debug=False):
+    def add_feature_pc(self, pos: torch.Tensor, feat_pc: FeaturePointCloudTorch, do_raytrace=False, debug=False, image_proc_keys=None):
         voxel_grid_new = VoxelGrid.from_feature_pc(feat_pc, self.metadata, self.n_features)
 
         if self.do_raytrace:

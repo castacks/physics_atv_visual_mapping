@@ -5,7 +5,6 @@ Should
 
 import abc
 
-
 class ImageProcessingBlock(abc.ABC):
     def __init__(self):
         pass
@@ -20,5 +19,13 @@ class ImageProcessingBlock(abc.ABC):
         Returns:
             feats: [B x C x W' x H'] Tensor of image features
             intrinsics_new: [B x 3 x 3] Tensor intrinsics of features
+        """
+        pass
+    
+    @property
+    @abc.abstractmethod
+    def update_image_proc_key(self, passthru_key):
+        """
+        update the image processing keys 
         """
         pass

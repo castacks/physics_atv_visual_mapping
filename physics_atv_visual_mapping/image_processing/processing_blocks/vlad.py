@@ -27,3 +27,6 @@ class VLADBlock(ImageProcessingBlock):
         img_outs = torch.stack(img_outs, dim=0)
 
         return img_outs, intrinsics
+    def update_image_proc_key(self, passthru_key):
+        passthru_key.image_processing = "vlad"
+        passthru_key.is_vfm = True

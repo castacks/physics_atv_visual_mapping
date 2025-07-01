@@ -30,3 +30,7 @@ class PCABlock(ImageProcessingBlock):
         )
 
         return img_out, intrinsics
+
+    def update_image_proc_key(self, passthru_key):
+        passthru_key.image_processing = "pca"
+        passthru_key.is_vfm = True

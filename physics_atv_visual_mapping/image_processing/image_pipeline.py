@@ -68,17 +68,24 @@ class ImagePipeline:
         image = image.to(self.device).float()
         image_feats = image.clone()
         intrinsics_out = intrinsics.clone()
-
         for block in self.blocks:
             image_feats, intrinsics_out = block.run(image_feats, intrinsics_out, image)
 
         return image_feats, intrinsics_out
 
     def __repr__(self):
-        out = "ImagePipeline with:\n"
         for block in self.blocks:
             out += "\t" + str(block) + "\n"
         return out
+    
+    def compute_image_proc_keys(self, passthru_keys):
+        """
+        Precompute image processing key of the last block in the pipeline   
+        """
+        if self.blocks:
+            return self.blocks[-1].update_image_proc_key(passthru_keys)
+        else:
+            return None
 
 
 if __name__ == "__main__":

@@ -73,3 +73,7 @@ class RadioBlock(ImageProcessingBlock):
         intrinsics[:, 1, 2] *= dy / iy
 
         return img_out, intrinsics
+
+    def update_image_proc_key(self, passthru_key):
+        passthru_key.image_processing = "radio"
+        passthru_key.is_vfm = True

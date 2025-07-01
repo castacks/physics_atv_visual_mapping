@@ -30,3 +30,7 @@ class PCAVLADBlock(ImageProcessingBlock):
         res_image = torch.cat([pca_image, vlad_image], dim=1)
 
         return res_image, pca_intrinsics
+    
+    def update_image_proc_key(self, passthru_key):
+        passthru_key.image_processing = "pca_vlad"
+        passthru_key.is_vfm = True

@@ -48,3 +48,8 @@ class Dinov2Block(ImageProcessingBlock):
         intrinsics[:, 1, 2] *= dy / iy
 
         return img_out, intrinsics
+
+
+    def update_image_proc_key(self, passthru_key):
+        passthru_key.name = "dino"
+        passthru_key.is_vfm = True

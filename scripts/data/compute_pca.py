@@ -32,6 +32,7 @@ if __name__ == "__main__":
     parser.add_argument('--pc_lim', type=float, nargs=2, required=False, default=[5., 100.], help='limit on range (m) of pts to consider')
     parser.add_argument('--pca_nfeats', type=int, required=False, default=64, help='number of pca feats to use')
     parser.add_argument('--n_frames', type=int, required=False, default=3000, help='process this many frames for the pca')
+    parser.add_argument('--no_pc_mask', action='store_true')
     args = parser.parse_args()
 
     config = yaml.safe_load(open(args.config, "r"))
@@ -157,14 +158,17 @@ if __name__ == "__main__":
             # move back to channels-last
             feature_images = feature_images.permute(0, 2, 3, 1)
 
-            coords, valid_mask = get_pixel_projection(pcl_base[:, :3], image_Ps, feature_images)
+            if args.no_pc_mask:
+                dino_buf.append(feature_images.view(-1, feature_images.shape[-1]))
+            else:
+                coords, valid_mask = get_pixel_projection(pcl_base[:, :3], image_Ps, feature_images)
 
-            for img, coors, vmask in zip(feature_images, coords, valid_mask):
-                coors = coors[vmask].long()
-                coors = torch.unique(coors, dim=0)
+                for img, coors, vmask in zip(feature_images, coords, valid_mask):
+                    coors = coors[vmask].long()
+                    coors = torch.unique(coors, dim=0)
 
-                feats = img[coors[:, 1], coors[:, 0]]
-                dino_buf.append(feats)
+                    feats = img[coors[:, 1], coors[:, 0]]
+                    dino_buf.append(feats)
 
     dino_buf = torch.cat(dino_buf, dim=0)
     feat_mean = dino_buf.mean(dim=0)
@@ -296,31 +300,36 @@ if __name__ == "__main__":
 
             ni = len(images)
             
-            fig, axs = plt.subplots(4, ni, figsize=(8 * ni, 5 * 3))
+            fig, axs = plt.subplots(5, ni, figsize=(8 * ni, 5 * 3))
             if ni == 1:
-                axs = axs.reshape(4, 1)
+                axs = axs.reshape(5, 1)
 
             axs[0, 0].set_ylabel('Raw')
-            axs[1, 0].set_ylabel('PCA')
-            axs[1, 0].set_ylabel('Raw + PCA')
-            axs[2, 0].set_ylabel('Mask')
+            axs[1, 0].set_ylabel('Mask')
+            axs[2, 0].set_ylabel('PCA 1-3')
+            axs[3, 0].set_ylabel('PCA 4-6')
+            axs[4, 0].set_ylabel('PCA 7-9')
 
             for i in range(ni):
                 ilabel = image_keys[i]
                 raw_img = images[i].cpu().numpy()
-                feat_img = normalize_dino(feature_images[i]).cpu().numpy()
+                feat_img1 = normalize_dino(feature_images[i][..., :3]).cpu().numpy()
+                feat_img2 = normalize_dino(feature_images[i][..., 3:6]).cpu().numpy()
+                feat_img3 = normalize_dino(feature_images[i][..., 6:9]).cpu().numpy()
+
                 mask_img = img_masks[i].cpu().numpy()
 
-                proj_extent = (0, feat_img.shape[1], 0, feat_img.shape[0])
+                proj_extent = (0, raw_img.shape[1], 0, raw_img.shape[0])
 
                 axs[0, i].imshow(raw_img, extent=proj_extent)
-                axs[2, i].imshow(raw_img, extent=proj_extent)
-                axs[3, i].imshow(raw_img, extent=proj_extent)
+                axs[1, i].imshow(raw_img, extent=proj_extent)
 
-                axs[1, i].imshow(feat_img, extent=proj_extent)
-                axs[2, i].imshow(feat_img, extent=proj_extent, alpha=0.3)
-                
-                axs[2, i].imshow(mask_img, cmap='gray', extent=proj_extent, alpha=0.3)
+                axs[1, i].imshow(feat_img1, extent=proj_extent, alpha=0.3)
+                axs[1, i].imshow(mask_img, cmap='gray', extent=proj_extent, alpha=0.3)
+
+                axs[2, i].imshow(feat_img1, extent=proj_extent)
+                axs[3, i].imshow(feat_img2, extent=proj_extent)
+                axs[4, i].imshow(feat_img3, extent=proj_extent)
 
                 axs[0, i].set_title(ilabel)
 

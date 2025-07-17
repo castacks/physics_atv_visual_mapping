@@ -54,7 +54,7 @@ class GaussKernelAttn(nn.Module):
     self.device = device
     self.num_prefix_tokens = num_prefix_tokens
 
-  def forward(self, x: torch.Tensor) -> torch.Tensor:
+  def forward(self, x: torch.Tensor, attn_mask=None) -> torch.Tensor:
     B, N, C = x.shape
     h, w = self.input_resolution
     n_patches = (w // 16, h //16)
@@ -169,13 +169,14 @@ class RadioLangBlock(ImageProcessingBlock):
 
         last_block = self.radio.model.blocks[-1]
         last_block.attn = GaussKernelAttn(
-        last_block.attn,
-        input_resolution=self.input_size,
-        gauss_std=7.0,
-        dim=self.radio.model.embed_dim,
-        chosen_cls_id=self.adaptor.head_idx,
-        device=self.device,
-        num_prefix_tokens=self.radio.num_summary_tokens)
+            last_block.attn,
+            input_resolution=self.input_size,
+            gauss_std=7.0,
+            dim=self.radio.model.embed_dim,
+            chosen_cls_id=self.adaptor.head_idx,
+            device=self.device,
+            num_prefix_tokens=self.radio.num_summary_tokens
+        )
 
     def preprocess(self, img):
         assert len(img.shape) == 4, "need to batch images"

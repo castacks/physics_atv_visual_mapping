@@ -20,10 +20,10 @@ class ElevationStats(TerrainEstimationBlock):
 
     def run(self, voxel_grid, bev_grid):
         #keys can vary so we need to recompute them here
-        min_height_idx = bev_grid.feature_keys.index(self.output_keys[0])
-        mean_height_idx = bev_grid.feature_keys.index(self.output_keys[1])
-        max_height_idx = bev_grid.feature_keys.index(self.output_keys[2])
-        num_voxels_idx = bev_grid.feature_keys.index(self.output_keys[3])
+        min_height_idx = bev_grid.feature_key_list.index(self.output_keys[0])
+        mean_height_idx = bev_grid.feature_key_list.index(self.output_keys[1])
+        max_height_idx = bev_grid.feature_key_list.index(self.output_keys[2])
+        num_voxels_idx = bev_grid.feature_key_list.index(self.output_keys[3])
 
         #get grid idxs and coordinates of voxel grid
         voxel_grid_idxs = voxel_grid.raster_indices_to_grid_indices(voxel_grid.raster_indices)

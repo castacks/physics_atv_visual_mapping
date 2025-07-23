@@ -32,10 +32,10 @@ class ElevationFilter(TerrainEstimationBlock):
         kernel = self.kernel.clone()
         kernel[kmid, kmid] = 0.
 
-        input_idx = bev_grid.feature_keys.index(self.input_layer)
+        input_idx = bev_grid.feature_key_list.index(self.input_layer)
         input_data = bev_grid.data[..., input_idx].clone()
 
-        cnt_idx = bev_grid.feature_keys.index(self.cnt_layer)
+        cnt_idx = bev_grid.feature_key_list.index(self.cnt_layer)
         valid_mask = bev_grid.data[..., cnt_idx] > 1e-4
 
         #empty placeholder must be 0 to count correctly
@@ -55,8 +55,8 @@ class ElevationFilter(TerrainEstimationBlock):
         
         input_data[~valid_mask] = 0.
 
-        output_data_idx = bev_grid.feature_keys.index(self.output_keys[0])
-        output_mask_idx = bev_grid.feature_keys.index(self.output_keys[1])
+        output_data_idx = bev_grid.feature_key_list.index(self.output_keys[0])
+        output_mask_idx = bev_grid.feature_key_list.index(self.output_keys[1])
 
         bev_grid.data[..., output_data_idx] = input_data
         bev_grid.data[..., output_mask_idx] = valid_mask.float()

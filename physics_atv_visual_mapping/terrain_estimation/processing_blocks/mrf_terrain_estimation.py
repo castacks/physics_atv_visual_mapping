@@ -32,10 +32,10 @@ class MRFTerrainEstimation(TerrainEstimationBlock):
         return ["terrain"]
 
     def run(self, voxel_grid, bev_grid):
-        input_idx = bev_grid.feature_keys.index(self.input_layer)
+        input_idx = bev_grid.feature_key_list.index(self.input_layer)
         input_data = bev_grid.data[..., input_idx].clone()
 
-        mask_idx = bev_grid.feature_keys.index(self.mask_layer)
+        mask_idx = bev_grid.feature_key_list.index(self.mask_layer)
         mask = bev_grid.data[..., mask_idx] > 1e-4
 
         terrain_estimate = input_data.clone()
@@ -55,7 +55,7 @@ class MRFTerrainEstimation(TerrainEstimationBlock):
 
             terrain_estimate += dz
         
-        output_data_idx = bev_grid.feature_keys.index(self.output_keys[0])
+        output_data_idx = bev_grid.feature_key_list.index(self.output_keys[0])
         bev_grid.data[..., output_data_idx] = terrain_estimate
 
         return bev_grid

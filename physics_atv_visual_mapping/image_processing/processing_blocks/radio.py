@@ -9,7 +9,7 @@ import torch.nn.functional as F
 from physics_atv_visual_mapping.image_processing.processing_blocks.base import (
     ImageProcessingBlock,
 )
-
+from physics_atv_visual_mapping.feature_key_list import FeatureKeyList
 
 class RadioBlock(ImageProcessingBlock):
     """
@@ -72,8 +72,14 @@ class RadioBlock(ImageProcessingBlock):
         intrinsics[:, 1, 1] *= dy / iy
         intrinsics[:, 1, 2] *= dy / iy
 
+        import pdb; pdb.set_trace()
         return img_out, intrinsics
 
-    def update_image_proc_key(self, passthru_key):
-        passthru_key.image_processing = "radio"
-        passthru_key.is_vfm = True
+    @property
+    def feature_key_list(self):
+        # self.radio.n_output_channels
+        import pdb; pdb.set_trace()
+        return FeatureKeyList(
+            label=[f"radio_{i}" for i in range(self.radio.embed_dim)],
+            metadata=["vfm" for i in range(self.radio.embed_dim)]
+        )

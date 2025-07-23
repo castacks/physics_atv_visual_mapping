@@ -29,10 +29,10 @@ class TerrainInflation(TerrainEstimationBlock):
         return ["{}_inflated".format(self.input_layer), "{}_inflated_mask".format(self.input_layer)]
 
     def run(self, voxel_grid, bev_grid):
-        input_idx = bev_grid.feature_keys.index(self.input_layer)
+        input_idx = bev_grid.feature_key_list.index(self.input_layer)
         input_data = bev_grid.data[..., input_idx].clone()
 
-        mask_idx = bev_grid.feature_keys.index(self.mask_layer)
+        mask_idx = bev_grid.feature_key_list.index(self.mask_layer)
         valid_mask = bev_grid.data[..., mask_idx] > 1e-4
 
         input_data[~valid_mask] = 0.
@@ -48,8 +48,8 @@ class TerrainInflation(TerrainEstimationBlock):
         copy_mask = ~valid_mask & output_valid_mask
         input_data[copy_mask] = height_avg[copy_mask]
 
-        output_data_idx = bev_grid.feature_keys.index(self.output_keys[0])
-        output_mask_idx = bev_grid.feature_keys.index(self.output_keys[1])
+        output_data_idx = bev_grid.feature_key_list.index(self.output_keys[0])
+        output_mask_idx = bev_grid.feature_key_list.index(self.output_keys[1])
 
         bev_grid.data[..., output_data_idx] = input_data
         bev_grid.data[..., output_mask_idx] = output_valid_mask.float()

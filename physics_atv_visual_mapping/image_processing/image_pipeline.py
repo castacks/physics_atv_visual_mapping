@@ -52,6 +52,7 @@ def setup_image_pipeline(config):
 
         blocks.append(block)
 
+    pipeline.feature_key_list = pipeline.compute_feature_key_list()
     return pipeline
 
 
@@ -78,12 +79,12 @@ class ImagePipeline:
             out += "\t" + str(block) + "\n"
         return out
     
-    def compute_image_proc_keys(self, passthru_keys):
+    def compute_feature_key_list(self):
         """
         Precompute image processing key of the last block in the pipeline   
         """
         if self.blocks:
-            return self.blocks[-1].update_image_proc_key(passthru_keys)
+            return self.blocks[-1].feature_key_list
         else:
             return None
 

@@ -9,15 +9,10 @@ from physics_atv_visual_mapping.utils import *
 class BEVLocalMapper(LocalMapper):
     """Class for local mapping in BEV"""
 
-    def __init__(self, metadata, n_features, ema, device, feature_key='feature', feature_keys=None):
+    def __init__(self, metadata, n_features, ema, device, feature_key_list):
         super().__init__(metadata, device)
         assert metadata.ndims == 2, "BEVLocalMapper requires 2d metadata"
-        if feature_keys is None:
-            self.feature_keys = ['{}_{}'.format(feature_key, i) for i in range(n_features)]
-        else:
-            self.feature_keys = feature_keys
-
-        self.bev_grid = BEVGrid(self.metadata, n_features, self.feature_keys, device)
+        self.bev_grid = BEVGrid(self.metadata, n_features, feature_key_list=feature_key_list, device=device)
         self.n_features = n_features
         self.ema = ema
 
@@ -62,18 +57,17 @@ class BEVGrid:
     Actual class that handles feature aggregation
     """
 
-    def from_feature_pc(pts, features, feature_keys, metadata):
+    def from_feature_pc(pts, features, feature_key_list, metadata):
         """
-        Instantiate a BEVGrid from a feauture pc
+        Instantiate a BEVGrid from a feature pc
         """
-        bevgrid = BEVGrid(metadata, features.shape[-1], feature_keys, features.device)
+        bevgrid = BEVGrid(metadata, features.shape[-1], feature_key_list, features.device)
         grid_idxs, valid_mask = bevgrid.get_grid_idxs(pts)
         raster_idxs = grid_idxs[:, 0] * metadata.N[1] + grid_idxs[:, 1]
         res_map = torch.zeros(*metadata.N, features.shape[-1], device=features.device)
         known_map = torch.zeros(*metadata.N, device=features.device)
         raster_map = res_map.view(-1, features.shape[-1])
         raster_known_map = known_map.view(-1)
-
         torch_scatter.scatter(
             torch.ones(valid_mask.sum(), device=features.device),
             raster_idxs[valid_mask],
@@ -95,11 +89,11 @@ class BEVGrid:
 
         return bevgrid
 
-    def __init__(self, metadata, n_features, feature_keys, device='cpu'):
+    def __init__(self, metadata, n_features, feature_key_list, device='cpu'):
         self.metadata = metadata
-        self.feature_keys = feature_keys
         self.data = torch.zeros(*metadata.N, n_features, device=device)
         self.known = torch.zeros(*metadata.N, device=device, dtype=torch.bool)
+        self.feature_key_list = feature_key_list
         self.device = device
 
     def get_grid_idxs(self, pts):

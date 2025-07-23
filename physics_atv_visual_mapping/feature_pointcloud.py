@@ -4,7 +4,7 @@ class FeaturePointCloud:
     """
     Class for pointclouds with an arbitrary set of "features"
     """
-    def __init__(self, pts, feats, pt_to_feat_idxs, device='cpu'):
+    def __init__(self, pts, feats, pt_to_feat_idxs, feature_key_list, device='cpu'):
         """
         Args:
             pts: A [N1x3] FloatTensor of spatial positions
@@ -15,6 +15,7 @@ class FeaturePointCloud:
         self.pts = pts
         self.feats = feats
         self.pt_to_feat_idxs = pt_to_feat_idxs
+        self.feature_key_list = feature_key_list
         self.device = device
 
     def to(self, device):

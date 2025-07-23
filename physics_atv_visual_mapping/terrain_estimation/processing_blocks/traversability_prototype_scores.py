@@ -30,11 +30,11 @@ class TraversabilityPrototypeScore(TerrainEstimationBlock):
 
     def run(self, voxel_grid, bev_grid):
         vfm_fks = [x for x in bev_grid.feature_keys if self.vfm_feature_key in x]
-        vfm_fidxs = [bev_grid.feature_keys.index(x) for x in vfm_fks]
+        vfm_fidxs = [bev_grid.feature_key_list.index(x) for x in vfm_fks]
 
-        mask_idx = bev_grid.feature_keys.index(self.mask_key)
+        mask_idx = bev_grid.feature_key_list.index(self.mask_key)
 
-        res_idxs = [bev_grid.feature_keys.index(x) for x in self.output_keys]
+        res_idxs = [bev_grid.feature_key_list.index(x) for x in self.output_keys]
         
         ptype_scores = bev_grid.data[..., vfm_fidxs]
         mask = bev_grid.data[..., mask_idx] > 1e-4

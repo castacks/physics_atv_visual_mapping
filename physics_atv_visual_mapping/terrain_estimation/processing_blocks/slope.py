@@ -43,10 +43,10 @@ class Slope(TerrainEstimationBlock):
         return ["slope_x", "slope_y", "slope"]
 
     def run(self, voxel_grid, bev_grid):
-        terrain_idx = bev_grid.feature_keys.index(self.input_layer)
+        terrain_idx = bev_grid.feature_key_list.index(self.input_layer)
         terrain_data = bev_grid.data[..., terrain_idx].clone()
 
-        mask_idx = bev_grid.feature_keys.index(self.mask_layer)
+        mask_idx = bev_grid.feature_key_list.index(self.mask_layer)
         mask = bev_grid.data[..., mask_idx] > 1e-4
 
         #only take slopes if all convolved elements valid
@@ -61,13 +61,13 @@ class Slope(TerrainEstimationBlock):
         slope_y = slope_y.clip(-0.1, self.max_slope)
         slope = torch.hypot(slope_x, slope_y)
 
-        slope_x_idx = bev_grid.feature_keys.index(self.output_keys[0])
+        slope_x_idx = bev_grid.feature_key_list.index(self.output_keys[0])
         bev_grid.data[..., slope_x_idx] = slope_x
 
-        slope_y_idx = bev_grid.feature_keys.index(self.output_keys[1])
+        slope_y_idx = bev_grid.feature_key_list.index(self.output_keys[1])
         bev_grid.data[..., slope_y_idx] = slope_y
 
-        slope_idx = bev_grid.feature_keys.index(self.output_keys[2])
+        slope_idx = bev_grid.feature_key_list.index(self.output_keys[2])
         bev_grid.data[..., slope_idx] = slope
 
         return bev_grid

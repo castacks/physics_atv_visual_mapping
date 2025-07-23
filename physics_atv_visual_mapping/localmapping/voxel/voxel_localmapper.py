@@ -12,10 +12,10 @@ from physics_atv_visual_mapping.utils import *
 class VoxelLocalMapper(LocalMapper):
     """Class for local mapping voxels"""
 
-    def __init__(self, metadata, n_features, ema, raytracer=None, device='cpu'):
+    def __init__(self, metadata, n_features, ema, feature_key_list, raytracer=None, device='cpu'):
         super().__init__(metadata, device)
         assert metadata.ndims == 3, "VoxelLocalMapper requires 3d metadata"
-        self.voxel_grid = VoxelGrid(self.metadata, n_features, device)
+        self.voxel_grid = VoxelGrid(self.metadata, n_features, feature_key_list, device)
         self.n_features = n_features
         self.raytracer = raytracer
         self.do_raytrace = self.raytracer is not None
@@ -37,7 +37,7 @@ class VoxelLocalMapper(LocalMapper):
         self.voxel_grid.shift(px_shift)
         self.metadata.origin = new_origin
 
-    def add_feature_pc(self, pos: torch.Tensor, feat_pc: FeaturePointCloudTorch, do_raytrace=False, debug=False, image_proc_keys=None):
+    def add_feature_pc(self, pos: torch.Tensor, feat_pc: FeaturePointCloudTorch, do_raytrace=False, debug=False):
         voxel_grid_new = VoxelGrid.from_feature_pc(feat_pc, self.metadata, self.n_features)
 
         if self.do_raytrace:
@@ -172,8 +172,9 @@ class VoxelGrid:
             1. separate out feature points and non-feature points
         """
         n_features = feat_pc.features.shape[-1] if n_features == -1 else n_features
+        voxelgrid = VoxelGrid(metadata, n_features, feat_pc.feature_key_list, feat_pc.device)
 
-        voxelgrid = VoxelGrid(metadata, n_features, feat_pc.device)
+        voxelgrid.feature_key_list = feat_pc.feature_key_list
 
         feature_pts = feat_pc.feature_pts
         feature_pts_features = feat_pc.features[:, :n_features]
@@ -240,7 +241,7 @@ class VoxelGrid:
 
     #     return voxelgrid
 
-    def __init__(self, metadata, n_features, device):
+    def __init__(self, metadata, n_features, feature_key_list, device):
         self.metadata = metadata
 
         #raster indices of all points in voxel grid
@@ -255,6 +256,7 @@ class VoxelGrid:
         self.hits = torch.zeros(0, dtype=torch.float, device=device) + 1e-8
         self.misses = torch.zeros(0, dtype=torch.float, device=device)
 
+        self.feature_key_list = feature_key_list
         self.device = device
 
     @property

@@ -39,7 +39,6 @@ def remove_invalid(lidar_points):
 
     return valid_points
 
-
 def get_intrinsics(intrinsics_matrix, tf_in_optical=True):
     """Returns intrinsics matrix depending on whether we have a transform to the camera available in optical_frame or not.
 
@@ -70,7 +69,6 @@ def get_intrinsics(intrinsics_matrix, tf_in_optical=True):
         I[:3, :3] = intrinsics_matrix
         return I
 
-
 def get_extrinsics(extrinsics_matrix, tf_in_optical=True):
     """Returns extrinsics matrix that takes into account rotation between camera axes and source axes.
 
@@ -90,7 +88,6 @@ def get_extrinsics(extrinsics_matrix, tf_in_optical=True):
     else:
         # TODO
         return extrinsics_matrix
-
 
 def get_projection_matrix(intrinsics, extrinsics):
     """Returns projection matrix from 3D points in "target" coordinate frame to 2D points in pixel space.

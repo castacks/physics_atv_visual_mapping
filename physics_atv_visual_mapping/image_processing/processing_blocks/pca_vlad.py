@@ -6,7 +6,7 @@ from physics_atv_visual_mapping.image_processing.processing_blocks.base import (
 )
 from physics_atv_visual_mapping.image_processing.processing_blocks.pca import PCABlock
 from physics_atv_visual_mapping.image_processing.processing_blocks.vlad import VLADBlock
-
+from physics_atv_visual_mapping.feature_key_list import FeatureKeyList
 
 class PCAVLADBlock(ImageProcessingBlock):
     """
@@ -31,6 +31,12 @@ class PCAVLADBlock(ImageProcessingBlock):
 
         return res_image, pca_intrinsics
     
-    def update_image_proc_key(self, passthru_key):
-        passthru_key.image_processing = "pca_vlad"
-        passthru_key.is_vfm = True
+    @property
+    def feature_key_list(self):
+        pca_dim = self.pca_block['V'].shape[-1]
+        vlad_dim = self.vlad_block.num_clusters
+
+        label = [f"pca_{i}" for i in range(pca_dim)] + [f"vlad_{i}" for i in range(vlad_dim)]
+        metadata = ["vfm"] * (pca_dim + vlad_dim)
+
+        return FeatureKeyList(label=label, metadata=metadata)

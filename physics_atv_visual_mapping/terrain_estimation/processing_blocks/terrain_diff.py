@@ -22,7 +22,7 @@ class TerrainDiff(TerrainEstimationBlock):
         return ["diff"]
 
     def run(self, voxel_grid, bev_grid):
-        terrain_idx = bev_grid.feature_keys.index(self.terrain_layer)
+        terrain_idx = bev_grid.feature_key_list.index(self.terrain_layer)
         terrain_data = bev_grid.data[..., terrain_idx].clone()
 
         voxel_grid_idxs = voxel_grid.raster_indices_to_grid_indices(voxel_grid.raster_indices)
@@ -43,7 +43,7 @@ class TerrainDiff(TerrainEstimationBlock):
         diff = torch_scatter.scatter(src=features_to_scatter, index=idxs_to_scatter, dim_size=num_cells, reduce='max')
         diff = diff.view(*bev_grid.metadata.N).clip(0., self.overhang)
 
-        diff_idx = bev_grid.feature_keys.index(self.output_keys[0])
+        diff_idx = bev_grid.feature_key_list.index(self.output_keys[0])
         bev_grid.data[..., diff_idx] = diff
 
         return bev_grid

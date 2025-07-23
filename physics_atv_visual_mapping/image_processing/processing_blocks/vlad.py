@@ -6,7 +6,7 @@ from physics_atv_visual_mapping.image_processing.anyloc_utils import VLAD
 from physics_atv_visual_mapping.image_processing.processing_blocks.base import (
     ImageProcessingBlock,
 )
-
+from physics_atv_visual_mapping.feature_key_list import FeatureKeyList
 
 class VLADBlock(ImageProcessingBlock):
     def __init__(self, n_clusters, cache_dir, models_dir, desc_dim=None, device="cuda"):
@@ -27,6 +27,10 @@ class VLADBlock(ImageProcessingBlock):
         img_outs = torch.stack(img_outs, dim=0)
 
         return img_outs, intrinsics
-    def update_image_proc_key(self, passthru_key):
-        passthru_key.image_processing = "vlad"
-        passthru_key.is_vfm = True
+
+    @property
+    def feature_key_list(self):
+        return FeatureKeyList(
+            label=[f"vlad_{i}" for i in range(self.vlad.num_clusters)],
+            metadata=["vfm" for i in range(self.vlad.num_clusters)]
+        )

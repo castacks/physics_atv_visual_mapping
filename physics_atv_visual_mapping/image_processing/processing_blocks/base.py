@@ -24,7 +24,7 @@ class ImageProcessingBlock(abc.ABC):
     
     @property
     @abc.abstractmethod
-    def update_image_proc_key(self, passthru_key):
+    def feature_key_list(self):
         """
         update the image processing keys 
         """

@@ -4,7 +4,7 @@ import torch
 from physics_atv_visual_mapping.image_processing.processing_blocks.base import (
     ImageProcessingBlock,
 )
-
+from physics_atv_visual_mapping.feature_key_list import FeatureKeyList
 
 class PCABlock(ImageProcessingBlock):
     """
@@ -31,6 +31,9 @@ class PCABlock(ImageProcessingBlock):
 
         return img_out, intrinsics
 
-    def update_image_proc_key(self, passthru_key):
-        passthru_key.image_processing = "pca"
-        passthru_key.is_vfm = True
+    @property
+    def feature_key_list(self):
+        return FeatureKeyList(
+            label=[f"pca_{i}" for i in range(self.pca["V"].shape[-1])],
+            metadata=["vfm" for i in range(self.pca["V"].shape[-1])]
+        )

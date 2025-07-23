@@ -24,10 +24,10 @@ class TerrainAwareBEVFeatureSplat(TerrainEstimationBlock):
         return ["{}_{}".format(self.output_key, i) for i in range(self.voxel_n_features)]
 
     def run(self, voxel_grid, bev_grid):
-        terrain_idx = bev_grid.feature_keys.index(self.terrain_layer)
+        terrain_idx = bev_grid.feature_key_list.index(self.terrain_layer)
         terrain_data = bev_grid.data[..., terrain_idx].clone()
 
-        mask_idx = bev_grid.feature_keys.index(self.terrain_mask_layer)
+        mask_idx = bev_grid.feature_key_list.index(self.terrain_mask_layer)
         terrain_mask = bev_grid.data[..., mask_idx] > 1e-4
 
         voxel_grid_idxs = voxel_grid.raster_indices_to_grid_indices(voxel_grid.feature_raster_indices)
@@ -49,7 +49,7 @@ class TerrainAwareBEVFeatureSplat(TerrainEstimationBlock):
         bev_features = torch_scatter.scatter(src=features_to_scatter, index=idxs_to_scatter, dim_size=num_cells, dim=0, reduce=self.reduce)
         bev_features = bev_features.view(*bev_grid.metadata.N, self.voxel_n_features)
 
-        bev_feature_idxs = [bev_grid.feature_keys.index(k) for k in self.output_keys]
+        bev_feature_idxs = [bev_grid.feature_key_list.index(k) for k in self.output_keys]
         bev_grid.data[..., bev_feature_idxs] = bev_features
 
         return bev_grid

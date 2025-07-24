@@ -50,11 +50,11 @@ class Dinov2Block(ImageProcessingBlock):
         return img_out, intrinsics
     
     @property
-    def feature_key_list(self):
+    def output_feature_keys(self):
         #n_layers = sum of layer.outchannels for layer in self.dino.layers
         n_layers = sum(self.dino.dino_model.embed_dim for layer in self.dino.layers)
 
         return FeatureKeyList(
             label=[f"dino_{i}" for i in range(n_layers)],
-            metadata=["vfm" for i in range(n_layers)]
+            metainfo=["vfm" for i in range(n_layers)]
         )

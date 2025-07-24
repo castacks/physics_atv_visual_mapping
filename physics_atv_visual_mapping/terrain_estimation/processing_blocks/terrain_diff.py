@@ -3,13 +3,14 @@ import torch_scatter
 
 from physics_atv_visual_mapping.terrain_estimation.processing_blocks.base import TerrainEstimationBlock
 from physics_atv_visual_mapping.terrain_estimation.processing_blocks.utils import sobel_x_kernel, sobel_y_kernel, apply_kernel
+from physics_atv_visual_mapping.feature_key_list import FeatureKeyList
 
 class TerrainDiff(TerrainEstimationBlock):
     """
     Compute a per-cell min and max height
     """
-    def __init__(self, voxel_metadata, voxel_n_features, terrain_layer, overhang, device):
-        super().__init__(voxel_metadata, voxel_n_features, device)
+    def __init__(self, voxel_metadata, voxel_feature_keys, terrain_layer, overhang, device):
+        super().__init__(voxel_metadata, voxel_feature_keys, device)
         self.terrain_layer = terrain_layer
         self.overhang = overhang
 
@@ -18,11 +19,14 @@ class TerrainDiff(TerrainEstimationBlock):
         return self
 
     @property
-    def output_keys(self):
-        return ["diff"]
+    def output_feature_keys(self):
+        return FeatureKeyList(
+            label = ["diff"],
+            metainfo = ["terrain_estimation"]
+        )
 
     def run(self, voxel_grid, bev_grid):
-        terrain_idx = bev_grid.feature_key_list.index(self.terrain_layer)
+        terrain_idx = bev_grid.feature_keys.index(self.terrain_layer)
         terrain_data = bev_grid.data[..., terrain_idx].clone()
 
         voxel_grid_idxs = voxel_grid.raster_indices_to_grid_indices(voxel_grid.raster_indices)
@@ -43,7 +47,7 @@ class TerrainDiff(TerrainEstimationBlock):
         diff = torch_scatter.scatter(src=features_to_scatter, index=idxs_to_scatter, dim_size=num_cells, reduce='max')
         diff = diff.view(*bev_grid.metadata.N).clip(0., self.overhang)
 
-        diff_idx = bev_grid.feature_key_list.index(self.output_keys[0])
+        diff_idx = bev_grid.feature_keys.index(self.output_feature_keys.label[0])
         bev_grid.data[..., diff_idx] = diff
 
         return bev_grid

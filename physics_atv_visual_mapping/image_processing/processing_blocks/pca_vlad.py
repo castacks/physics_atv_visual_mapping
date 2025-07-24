@@ -32,11 +32,5 @@ class PCAVLADBlock(ImageProcessingBlock):
         return res_image, pca_intrinsics
     
     @property
-    def feature_key_list(self):
-        pca_dim = self.pca_block['V'].shape[-1]
-        vlad_dim = self.vlad_block.num_clusters
-
-        label = [f"pca_{i}" for i in range(pca_dim)] + [f"vlad_{i}" for i in range(vlad_dim)]
-        metadata = ["vfm"] * (pca_dim + vlad_dim)
-
-        return FeatureKeyList(label=label, metadata=metadata)
+    def output_feature_keys(self):
+        return self.pca_block.output_feature_keys + self.vlad_block.output_feature_keys

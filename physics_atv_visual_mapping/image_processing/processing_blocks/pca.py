@@ -32,8 +32,8 @@ class PCABlock(ImageProcessingBlock):
         return img_out, intrinsics
 
     @property
-    def feature_key_list(self):
+    def output_feature_keys(self):
         return FeatureKeyList(
             label=[f"pca_{i}" for i in range(self.pca["V"].shape[-1])],
-            metadata=["vfm" for i in range(self.pca["V"].shape[-1])]
+            metainfo=["vfm" for i in range(self.pca["V"].shape[-1])]
         )

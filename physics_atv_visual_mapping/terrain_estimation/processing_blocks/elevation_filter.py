@@ -3,13 +3,14 @@ import torch_scatter
 
 from physics_atv_visual_mapping.terrain_estimation.processing_blocks.base import TerrainEstimationBlock
 from physics_atv_visual_mapping.terrain_estimation.processing_blocks.utils import setup_kernel, apply_kernel
+from physics_atv_visual_mapping.feature_key_list import FeatureKeyList
 
 class ElevationFilter(TerrainEstimationBlock):
     """
     Compute a per-cell min and max height
     """
-    def __init__(self, voxel_metadata, voxel_n_features, input_layer, cnt_layer, kernel_params, height_low_thresh, height_high_thresh, device):
-        super().__init__(voxel_metadata, voxel_n_features, device)
+    def __init__(self, voxel_metadata, voxel_feature_keys, input_layer, cnt_layer, kernel_params, height_low_thresh, height_high_thresh, device):
+        super().__init__(voxel_metadata, voxel_feature_keys, device)
         self.input_layer = input_layer
         self.cnt_layer = cnt_layer
 
@@ -24,18 +25,21 @@ class ElevationFilter(TerrainEstimationBlock):
         return self
 
     @property
-    def output_keys(self):
-        return ["{}_filtered".format(self.input_layer), "{}_filtered_mask".format(self.input_layer)]
+    def output_feature_keys(self):
+        return FeatureKeyList(
+            label = ["{}_filtered".format(self.input_layer), "{}_filtered_mask".format(self.input_layer)],
+            metainfo = ["terrain_estimation"] * 2
+        )
 
     def run(self, voxel_grid, bev_grid):
         kmid = self.kernel.shape[0]//2
         kernel = self.kernel.clone()
         kernel[kmid, kmid] = 0.
 
-        input_idx = bev_grid.feature_key_list.index(self.input_layer)
+        input_idx = bev_grid.feature_keys.index(self.input_layer)
         input_data = bev_grid.data[..., input_idx].clone()
 
-        cnt_idx = bev_grid.feature_key_list.index(self.cnt_layer)
+        cnt_idx = bev_grid.feature_keys.index(self.cnt_layer)
         valid_mask = bev_grid.data[..., cnt_idx] > 1e-4
 
         #empty placeholder must be 0 to count correctly
@@ -55,8 +59,8 @@ class ElevationFilter(TerrainEstimationBlock):
         
         input_data[~valid_mask] = 0.
 
-        output_data_idx = bev_grid.feature_key_list.index(self.output_keys[0])
-        output_mask_idx = bev_grid.feature_key_list.index(self.output_keys[1])
+        output_data_idx = bev_grid.feature_keys.index(self.output_feature_keys.label[0])
+        output_mask_idx = bev_grid.feature_keys.index(self.output_feature_keys.label[1])
 
         bev_grid.data[..., output_data_idx] = input_data
         bev_grid.data[..., output_mask_idx] = valid_mask.float()

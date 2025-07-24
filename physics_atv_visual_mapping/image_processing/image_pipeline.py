@@ -55,7 +55,6 @@ def setup_image_pipeline(config):
 
         blocks.append(block)
 
-    pipeline.feature_key_list = pipeline.compute_feature_key_list()
     return pipeline
 
 
@@ -82,12 +81,13 @@ class ImagePipeline:
             out += "\t" + str(block) + "\n"
         return out
     
-    def compute_feature_key_list(self):
+    @property
+    def output_feature_keys(self):
         """
         Precompute image processing key of the last block in the pipeline   
         """
         if self.blocks:
-            return self.blocks[-1].feature_key_list
+            return self.blocks[-1].output_feature_keys
         else:
             return None
 

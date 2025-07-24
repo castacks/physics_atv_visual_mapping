@@ -2,13 +2,14 @@ import torch
 import torch_scatter
 
 from physics_atv_visual_mapping.terrain_estimation.processing_blocks.base import TerrainEstimationBlock
+from physics_atv_visual_mapping.feature_key_list import FeatureKeyList
 
 class Porosity(TerrainEstimationBlock):
     """
     Compute porosity (avg voxel passthrough in a column)
     """
-    def __init__(self, voxel_metadata, voxel_n_features, device, reduce="mean"):
-        super().__init__(voxel_metadata, voxel_n_features, device)
+    def __init__(self, voxel_metadata, voxel_feature_keys, device, reduce="mean"):
+        super().__init__(voxel_metadata, voxel_feature_keys, device)
         self.reduce = reduce
         
     def to(self, device):
@@ -16,12 +17,15 @@ class Porosity(TerrainEstimationBlock):
         return self
 
     @property
-    def output_keys(self):
-        return ["porosity"]
+    def output_feature_keys(self):
+        return FeatureKeyList(
+            label = ["porosity"],
+            metainfo = ["terrain_estimation"]
+        )
 
     def run(self, voxel_grid, bev_grid):
         #keys can vary so we need to recompute them here
-        porosity_idx = bev_grid.feature_key_list.index(self.output_keys[0])
+        porosity_idx = bev_grid.feature_keys.index(self.output_feature_keys.label[0])
 
         #get grid idxs and coordinates of voxel grid
         voxel_grid_idxs = voxel_grid.raster_indices_to_grid_indices(voxel_grid.raster_indices)

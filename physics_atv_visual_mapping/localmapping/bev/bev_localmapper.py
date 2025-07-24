@@ -9,11 +9,13 @@ from physics_atv_visual_mapping.utils import *
 class BEVLocalMapper(LocalMapper):
     """Class for local mapping in BEV"""
 
-    def __init__(self, metadata, n_features, ema, device, feature_key_list):
+    def __init__(self, metadata, feature_keys, n_features, ema, device,):
         super().__init__(metadata, device)
         assert metadata.ndims == 2, "BEVLocalMapper requires 2d metadata"
-        self.bev_grid = BEVGrid(self.metadata, n_features, feature_key_list=feature_key_list, device=device)
-        self.n_features = n_features
+        self.n_features = len(feature_keys) if n_features == -1 else n_features
+        self.feature_keys = feature_keys[:self.n_features]
+
+        self.bev_grid = BEVGrid(self.metadata, self.feature_keys, device=device)
         self.ema = ema
 
     def update_pose(self, pose: torch.Tensor):
@@ -60,6 +62,7 @@ class BEVGrid:
     def from_feature_pc(pts, features, feature_key_list, metadata):
         """
         Instantiate a BEVGrid from a feature pc
+        TODO update this with FeaturePointCloudTorch/think about whether it even makes sense to support this
         """
         bevgrid = BEVGrid(metadata, features.shape[-1], feature_key_list, features.device)
         grid_idxs, valid_mask = bevgrid.get_grid_idxs(pts)
@@ -89,11 +92,13 @@ class BEVGrid:
 
         return bevgrid
 
-    def __init__(self, metadata, n_features, feature_key_list, device='cpu'):
+    def __init__(self, metadata, feature_keys, device='cpu'):
         self.metadata = metadata
-        self.data = torch.zeros(*metadata.N, n_features, device=device)
+        self.feature_keys = feature_keys
+        self.n_features = len(self.feature_keys)
+
+        self.data = torch.zeros(*metadata.N, self.n_features, device=device)
         self.known = torch.zeros(*metadata.N, device=device, dtype=torch.bool)
-        self.feature_key_list = feature_key_list
         self.device = device
 
     def get_grid_idxs(self, pts):

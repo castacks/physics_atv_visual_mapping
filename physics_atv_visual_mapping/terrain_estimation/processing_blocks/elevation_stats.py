@@ -2,28 +2,32 @@ import torch
 import torch_scatter
 
 from physics_atv_visual_mapping.terrain_estimation.processing_blocks.base import TerrainEstimationBlock
+from physics_atv_visual_mapping.feature_key_list import FeatureKeyList
 
 class ElevationStats(TerrainEstimationBlock):
     """
     Compute a per-cell min and max height
     """
-    def __init__(self, voxel_metadata, voxel_n_features, device):
-        super().__init__(voxel_metadata, voxel_n_features, device)
+    def __init__(self, voxel_metadata, voxel_feature_keys, device):
+        super().__init__(voxel_metadata, voxel_feature_keys, device)
         
     def to(self, device):
         self.device = device
         return self
 
     @property
-    def output_keys(self):
-        return ["min_elevation", "mean_elevation", "max_elevation", "num_voxels"]
+    def output_feature_keys(self):
+        return FeatureKeyList(
+            label = ["min_elevation", "mean_elevation", "max_elevation", "num_voxels"],
+            metainfo = ["terrain_estimation"] * 4
+        )
 
     def run(self, voxel_grid, bev_grid):
         #keys can vary so we need to recompute them here
-        min_height_idx = bev_grid.feature_key_list.index(self.output_keys[0])
-        mean_height_idx = bev_grid.feature_key_list.index(self.output_keys[1])
-        max_height_idx = bev_grid.feature_key_list.index(self.output_keys[2])
-        num_voxels_idx = bev_grid.feature_key_list.index(self.output_keys[3])
+        min_height_idx = bev_grid.feature_keys.index(self.output_feature_keys.label[0])
+        mean_height_idx = bev_grid.feature_keys.index(self.output_feature_keys.label[1])
+        max_height_idx = bev_grid.feature_keys.index(self.output_feature_keys.label[2])
+        num_voxels_idx = bev_grid.feature_keys.index(self.output_feature_keys.label[3])
 
         #get grid idxs and coordinates of voxel grid
         voxel_grid_idxs = voxel_grid.raster_indices_to_grid_indices(voxel_grid.raster_indices)

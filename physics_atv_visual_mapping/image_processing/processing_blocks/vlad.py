@@ -29,8 +29,8 @@ class VLADBlock(ImageProcessingBlock):
         return img_outs, intrinsics
 
     @property
-    def feature_key_list(self):
+    def output_feature_keys(self):
         return FeatureKeyList(
             label=[f"vlad_{i}" for i in range(self.vlad.num_clusters)],
-            metadata=["vfm" for i in range(self.vlad.num_clusters)]
+            metainfo=["vfm" for i in range(self.vlad.num_clusters)]
         )

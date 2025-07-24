@@ -35,35 +35,17 @@ vehicle_frame: vehicle
 
 image_processing:
     -
-        type: dino
+        type: radio_lang
         args:
-            dino_type: dinov2_vitb14_reg
-            dino_layers: [10]
-            image_insize: [854, 448]
-
-            # dino_type: radio_v2.5-b
-            # dino_layers: [11]
-            # image_insize: [848, 448]
-            # image_insize: [1696, 896]
-
-            desc_facet: value
-    # - 
-    #     type: pca
-    #     args:
-    #         fp: physics_atv_visual_mapping/pca/pca_vitb10_value.pt
-
-    # -
-    #     type: radio
-    #     args:
-    #         radio_type: radio_v2.5-l # radio_v2 e-radio_v2
-    #         image_insize: [672, 352]  # Original Image Size must be divisible by 16
-    #         # image_insize: [1344, 704]
+            image_insize: [848, 448]
+            radio_type: c-radio_v3-b
+            adaptor_type: siglip2
 
     - 
         type: pca
         args:
             # fp: physics_atv_visual_mapping/pca/new_radiob.pt
-            fp: physics_atv_visual_mapping/pca/vitb_reg_64_gascola_veg.pt
+            fp: physics_atv_visual_mapping/pca/radio_v3b_siglip2.pt
 
 # voxel
 localmapping:

@@ -9,16 +9,13 @@ from physics_atv_visual_mapping.utils import *
 class BEVLocalMapper(LocalMapper):
     """Class for local mapping in BEV"""
 
-    def __init__(self, metadata, n_features, ema, device, feature_key='feature', feature_keys=None):
+    def __init__(self, metadata, feature_keys, n_features, ema, device,):
         super().__init__(metadata, device)
         assert metadata.ndims == 2, "BEVLocalMapper requires 2d metadata"
-        if feature_keys is None:
-            self.feature_keys = ['{}_{}'.format(feature_key, i) for i in range(n_features)]
-        else:
-            self.feature_keys = feature_keys
+        self.n_features = len(feature_keys) if n_features == -1 else n_features
+        self.feature_keys = feature_keys[:self.n_features]
 
-        self.bev_grid = BEVGrid(self.metadata, n_features, self.feature_keys, device)
-        self.n_features = n_features
+        self.bev_grid = BEVGrid(self.metadata, self.feature_keys, device=device)
         self.ema = ema
 
     def update_pose(self, pose: torch.Tensor):
@@ -62,18 +59,18 @@ class BEVGrid:
     Actual class that handles feature aggregation
     """
 
-    def from_feature_pc(pts, features, feature_keys, metadata):
+    def from_feature_pc(pts, features, feature_key_list, metadata):
         """
-        Instantiate a BEVGrid from a feauture pc
+        Instantiate a BEVGrid from a feature pc
+        TODO update this with FeaturePointCloudTorch/think about whether it even makes sense to support this
         """
-        bevgrid = BEVGrid(metadata, features.shape[-1], feature_keys, features.device)
+        bevgrid = BEVGrid(metadata, features.shape[-1], feature_key_list, features.device)
         grid_idxs, valid_mask = bevgrid.get_grid_idxs(pts)
         raster_idxs = grid_idxs[:, 0] * metadata.N[1] + grid_idxs[:, 1]
         res_map = torch.zeros(*metadata.N, features.shape[-1], device=features.device)
         known_map = torch.zeros(*metadata.N, device=features.device)
         raster_map = res_map.view(-1, features.shape[-1])
         raster_known_map = known_map.view(-1)
-
         torch_scatter.scatter(
             torch.ones(valid_mask.sum(), device=features.device),
             raster_idxs[valid_mask],
@@ -95,10 +92,12 @@ class BEVGrid:
 
         return bevgrid
 
-    def __init__(self, metadata, n_features, feature_keys, device='cpu'):
+    def __init__(self, metadata, feature_keys, device='cpu'):
         self.metadata = metadata
         self.feature_keys = feature_keys
-        self.data = torch.zeros(*metadata.N, n_features, device=device)
+        self.n_features = len(self.feature_keys)
+
+        self.data = torch.zeros(*metadata.N, self.n_features, device=device)
         self.known = torch.zeros(*metadata.N, device=device, dtype=torch.bool)
         self.device = device
 

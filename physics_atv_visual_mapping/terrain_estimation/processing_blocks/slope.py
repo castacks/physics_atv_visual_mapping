@@ -3,13 +3,14 @@ import torch_scatter
 
 from physics_atv_visual_mapping.terrain_estimation.processing_blocks.base import TerrainEstimationBlock
 from physics_atv_visual_mapping.terrain_estimation.processing_blocks.utils import setup_kernel, apply_kernel
+from physics_atv_visual_mapping.feature_key_list import FeatureKeyList
 
 class Slope(TerrainEstimationBlock):
     """
     Compute a per-cell min and max height
     """
-    def __init__(self, voxel_metadata, voxel_n_features, input_layer, mask_layer, radius, max_slope=1e10, device='cpu'):
-        super().__init__(voxel_metadata, voxel_n_features, device)
+    def __init__(self, voxel_metadata, voxel_feature_keys, input_layer, mask_layer, radius, max_slope=1e10, device='cpu'):
+        super().__init__(voxel_metadata, voxel_feature_keys, device)
         self.input_layer = input_layer
         self.mask_layer = mask_layer
 
@@ -39,8 +40,11 @@ class Slope(TerrainEstimationBlock):
         return self
 
     @property
-    def output_keys(self):
-        return ["slope_x", "slope_y", "slope"]
+    def output_feature_keys(self):
+        return FeatureKeyList(
+            label = ["slope_x", "slope_y", "slope"],
+            metainfo = ["terrain_estimation"] * 3
+        )
 
     def run(self, voxel_grid, bev_grid):
         terrain_idx = bev_grid.feature_keys.index(self.input_layer)
@@ -61,13 +65,13 @@ class Slope(TerrainEstimationBlock):
         slope_y = slope_y.clip(-0.1, self.max_slope)
         slope = torch.hypot(slope_x, slope_y)
 
-        slope_x_idx = bev_grid.feature_keys.index(self.output_keys[0])
+        slope_x_idx = bev_grid.feature_keys.index(self.output_feature_keys.label[0])
         bev_grid.data[..., slope_x_idx] = slope_x
 
-        slope_y_idx = bev_grid.feature_keys.index(self.output_keys[1])
+        slope_y_idx = bev_grid.feature_keys.index(self.output_feature_keys.label[1])
         bev_grid.data[..., slope_y_idx] = slope_y
 
-        slope_idx = bev_grid.feature_keys.index(self.output_keys[2])
+        slope_idx = bev_grid.feature_keys.index(self.output_feature_keys.label[2])
         bev_grid.data[..., slope_idx] = slope
 
         return bev_grid

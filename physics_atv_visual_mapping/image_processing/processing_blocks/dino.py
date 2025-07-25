@@ -7,7 +7,7 @@ from physics_atv_visual_mapping.image_processing.anyloc_utils import (
 from physics_atv_visual_mapping.image_processing.processing_blocks.base import (
     ImageProcessingBlock,
 )
-
+from physics_atv_visual_mapping.feature_key_list import FeatureKeyList
 
 class Dinov2Block(ImageProcessingBlock):
     """
@@ -48,3 +48,13 @@ class Dinov2Block(ImageProcessingBlock):
         intrinsics[:, 1, 2] *= dy / iy
 
         return img_out, intrinsics
+    
+    @property
+    def output_feature_keys(self):
+        #n_layers = sum of layer.outchannels for layer in self.dino.layers
+        n_layers = sum(self.dino.dino_model.embed_dim for layer in self.dino.layers)
+
+        return FeatureKeyList(
+            label=[f"dino_{i}" for i in range(n_layers)],
+            metainfo=["vfm" for i in range(n_layers)]
+        )

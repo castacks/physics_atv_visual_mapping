@@ -10,7 +10,7 @@ class LocalMapper(abc.ABC):
     Base mapper class (interface for BEV, voxel mapping)
     """
 
-    def __init__(self, metadata: LocalMapperMetadata, device="cpu"):
+    def __init__(self, metadata: LocalMapperMetadata, device="cpu", ):
         """
         Args:
             metadata: Metadata to define the map coordinates relative to poses

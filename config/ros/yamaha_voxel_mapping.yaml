@@ -35,24 +35,37 @@ vehicle_frame: vehicle
 
 image_processing:
     -
-        type: radio_lang
+        type: dino
         args:
-            image_insize: [848, 448]
-            radio_type: c-radio_v3-b
-            adaptor_type: siglip2
+            dino_type: dinov2_vitb14_reg
+            dino_layers: [10]
+            image_insize: [854, 448]
 
+            desc_facet: value
     - 
         type: pca
         args:
-            # fp: physics_atv_visual_mapping/pca/new_radiob.pt
-            fp: physics_atv_visual_mapping/pca/radio_v3b_siglip2.pt
+            fp: physics_atv_visual_mapping/pca/vitb_reg_64_gascola_veg.pt
+
+    # -
+    #     type: radio_lang
+    #     args:
+    #         image_insize: [848, 448]
+    #         radio_type: c-radio_v3-b
+    #         adaptor_type: siglip2
+
+    # - 
+    #     type: pca
+    #     args:
+    #         # fp: physics_atv_visual_mapping/pca/new_radiob.pt
+    #         fp: physics_atv_visual_mapping/pca/radio_v3b_siglip2.pt
 
 # voxel
 localmapping:
     mapper_type: voxel
     layer_key: dino
     ema: 0.5 #higher->use recent more
-    n_features: 64
+    n_features: -1
     metadata:
         # origin: [-100., -100., -30.]
         # length: [200., 200., 60.]
@@ -150,7 +163,7 @@ terrain_estimation:
         args:
             input_layer: terrain
             mask_layer: min_elevation_filtered_inflated_mask
-            radius: 1.0
+            radius: 0.25
             max_slope: 2.0
 
     -
@@ -158,10 +171,12 @@ terrain_estimation:
         args:
             terrain_layer: terrain
             overhang: 2.0
+
     -
         type: terrain_aware_bev_feature_splat
         args:
-            output_key: dino
+            metainfo_key: vfm
+            n_features: 16
             terrain_layer: terrain
             terrain_mask_layer: min_elevation_filtered_inflated_mask
             overhang: 2.0

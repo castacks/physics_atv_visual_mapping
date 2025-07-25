@@ -7,9 +7,9 @@ Terrain estimation blocks will take in a voxel grid and a partially computed BEV
 import abc
 
 class TerrainEstimationBlock(abc.ABC):
-    def __init__(self, voxel_metadata, voxel_n_features, device='cpu'):
+    def __init__(self, voxel_metadata, voxel_feature_keys, device='cpu'):
         self.voxel_metadata = voxel_metadata
-        self.voxel_n_features = voxel_n_features
+        self.voxel_feature_keys = voxel_feature_keys
         self.device=device
 
     @abc.abstractmethod
@@ -25,7 +25,7 @@ class TerrainEstimationBlock(abc.ABC):
 
     @property
     @abc.abstractmethod
-    def output_keys(self):
+    def output_feature_keys(self):
         """
         define the layer keys to output to 
         Note that for some layers such as BEVSplat, the output keys depend on the input

@@ -12,11 +12,13 @@ from physics_atv_visual_mapping.utils import *
 class VoxelLocalMapper(LocalMapper):
     """Class for local mapping voxels"""
 
-    def __init__(self, metadata, n_features, ema, raytracer=None, device='cpu'):
+    def __init__(self, metadata, feature_keys, ema, raytracer=None, n_features=-1, device='cpu'):
         super().__init__(metadata, device)
         assert metadata.ndims == 3, "VoxelLocalMapper requires 3d metadata"
-        self.voxel_grid = VoxelGrid(self.metadata, n_features, device)
-        self.n_features = n_features
+        self.n_features = len(feature_keys) if n_features == -1 else n_features
+        self.feature_keys = feature_keys[:self.n_features]
+
+        self.voxel_grid = VoxelGrid(self.metadata, self.feature_keys, device)
         self.raytracer = raytracer
         self.do_raytrace = self.raytracer is not None
         self.ema = ema
@@ -39,6 +41,8 @@ class VoxelLocalMapper(LocalMapper):
 
     def add_feature_pc(self, pos: torch.Tensor, feat_pc: FeaturePointCloudTorch, do_raytrace=False, debug=False):
         voxel_grid_new = VoxelGrid.from_feature_pc(feat_pc, self.metadata, self.n_features)
+
+        assert self.voxel_grid.feature_keys == voxel_grid_new.feature_keys, f"voxel feat key mismatch: mapper has {self.voxel_grid.feature_keys}, added pc has {voxel_grid_new.feature_keys}"
 
         if self.do_raytrace:
             # self.raytracer.raytrace(pos, voxel_grid_meas=voxel_grid_new, voxel_grid_agg=self.voxel_grid)
@@ -163,7 +167,6 @@ class VoxelGrid:
     """
     Actual class that handles feature aggregation
     """
-
     def from_feature_pc(feat_pc, metadata, n_features=-1):
         """
         Instantiate a VoxelGrid from a feauture pc
@@ -171,9 +174,10 @@ class VoxelGrid:
         Steps:
             1. separate out feature points and non-feature points
         """
-        n_features = feat_pc.features.shape[-1] if n_features == -1 else n_features
+        n_features = len(feat_pc.feature_keys) if n_features == -1 else n_features
+        feat_keys = feat_pc.feature_keys[:n_features]
 
-        voxelgrid = VoxelGrid(metadata, n_features, feat_pc.device)
+        voxelgrid = VoxelGrid(metadata, feat_keys, feat_pc.device)
 
         feature_pts = feat_pc.feature_pts
         feature_pts_features = feat_pc.features[:, :n_features]
@@ -240,14 +244,16 @@ class VoxelGrid:
 
     #     return voxelgrid
 
-    def __init__(self, metadata, n_features, device):
+    def __init__(self, metadata, feature_keys, device):
         self.metadata = metadata
+        self.feature_keys = feature_keys
+        self.n_features = len(self.feature_keys)
 
         #raster indices of all points in voxel grid
         self.raster_indices = torch.zeros(0, dtype=torch.long, device=device)
 
         #list of features for all points in grid with features
-        self.features = torch.zeros(0, n_features, dtype=torch.float, device=device)
+        self.features = torch.zeros(0, self.n_features, dtype=torch.float, device=device)
 
         #mapping from indices to features (i.e. raster_indices[mask] = features)
         self.feature_mask = torch.zeros(0, dtype=torch.bool, device=device)

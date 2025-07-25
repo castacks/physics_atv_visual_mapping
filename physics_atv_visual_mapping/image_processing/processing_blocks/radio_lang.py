@@ -13,6 +13,7 @@ from timm.layers import use_fused_attn
 from physics_atv_visual_mapping.image_processing.processing_blocks.base import (
     ImageProcessingBlock,
 )
+from physics_atv_visual_mapping.feature_key_list import FeatureKeyList
 
 """
 Code heavily borrowed from https://github.com/RayFronts/RayFronts/blob/main/rayfronts/image_encoders/naradio.py
@@ -211,3 +212,12 @@ class RadioLangBlock(ImageProcessingBlock):
         intrinsics[:, 1, 2] *= dy / iy
 
         return img_out, intrinsics
+
+    @property
+    def output_feature_keys(self):
+        # self.radio.n_output_channels
+        import pdb; pdb.set_trace()
+        return FeatureKeyList(
+            label=[f"radio_{self.adaptor_type}_{i}" for i in range(self.radio.embed_dim)],
+            metainfo=["vfm" for i in range(self.radio.embed_dim)]
+        )

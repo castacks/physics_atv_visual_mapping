@@ -6,7 +6,7 @@ from physics_atv_visual_mapping.image_processing.processing_blocks.base import (
 )
 from physics_atv_visual_mapping.image_processing.processing_blocks.pca import PCABlock
 from physics_atv_visual_mapping.image_processing.processing_blocks.vlad import VLADBlock
-
+from physics_atv_visual_mapping.feature_key_list import FeatureKeyList
 
 class PCAVLADBlock(ImageProcessingBlock):
     """
@@ -30,3 +30,7 @@ class PCAVLADBlock(ImageProcessingBlock):
         res_image = torch.cat([pca_image, vlad_image], dim=1)
 
         return res_image, pca_intrinsics
+    
+    @property
+    def output_feature_keys(self):
+        return self.pca_block.output_feature_keys + self.vlad_block.output_feature_keys

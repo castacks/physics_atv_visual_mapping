@@ -76,6 +76,7 @@ class VoxelMappingNode(Node):
 
         self.image_pipeline = setup_image_pipeline(config)
 
+        self.feature_key_list = self.image_pipeline.feature_key_list
         self.setup_localmapper(config)
 
         self.do_terrain_estimation = "terrain_estimation" in config.keys()

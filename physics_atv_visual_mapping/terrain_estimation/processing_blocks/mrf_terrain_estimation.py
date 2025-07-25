@@ -3,13 +3,14 @@ import torch_scatter
 
 from physics_atv_visual_mapping.terrain_estimation.processing_blocks.base import TerrainEstimationBlock
 from physics_atv_visual_mapping.terrain_estimation.processing_blocks.utils import setup_kernel, apply_kernel
+from physics_atv_visual_mapping.feature_key_list import FeatureKeyList
 
 class MRFTerrainEstimation(TerrainEstimationBlock):
     """
     Compute a per-cell min and max height
     """
-    def __init__(self, voxel_metadata, voxel_n_features, input_layer, mask_layer, itrs, alpha, beta, lr, kernel_params, device):
-        super().__init__(voxel_metadata, voxel_n_features, device)
+    def __init__(self, voxel_metadata, voxel_feature_keys, input_layer, mask_layer, itrs, alpha, beta, lr, kernel_params, device):
+        super().__init__(voxel_metadata, voxel_feature_keys, device)
         self.input_layer = input_layer
         self.mask_layer = mask_layer
         self.itrs = itrs
@@ -28,8 +29,11 @@ class MRFTerrainEstimation(TerrainEstimationBlock):
         return self
 
     @property
-    def output_keys(self):
-        return ["terrain"]
+    def output_feature_keys(self):
+        return FeatureKeyList(
+            label = ["terrain"],
+            metainfo = ["terrain_estimation"]
+        )
 
     def run(self, voxel_grid, bev_grid):
         input_idx = bev_grid.feature_keys.index(self.input_layer)
@@ -55,7 +59,7 @@ class MRFTerrainEstimation(TerrainEstimationBlock):
 
             terrain_estimate += dz
         
-        output_data_idx = bev_grid.feature_keys.index(self.output_keys[0])
+        output_data_idx = bev_grid.feature_keys.index(self.output_feature_keys.label[0])
         bev_grid.data[..., output_data_idx] = terrain_estimate
 
         return bev_grid

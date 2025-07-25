@@ -3,6 +3,7 @@ import torch
 from physics_atv_visual_mapping.localmapping.voxel.voxel_localmapper import VoxelGrid
 from physics_atv_visual_mapping.localmapping.bev.bev_localmapper import BEVGrid
 from physics_atv_visual_mapping.localmapping.metadata import LocalMapperMetadata
+from physics_atv_visual_mapping.feature_key_list import FeatureKeyList
 
 from physics_atv_visual_mapping.terrain_estimation.processing_blocks.elevation_stats import ElevationStats
 from physics_atv_visual_mapping.terrain_estimation.processing_blocks.elevation_filter import ElevationFilter
@@ -13,20 +14,18 @@ from physics_atv_visual_mapping.terrain_estimation.processing_blocks.slope impor
 from physics_atv_visual_mapping.terrain_estimation.processing_blocks.terrain_diff import TerrainDiff
 from physics_atv_visual_mapping.terrain_estimation.processing_blocks.bev_feature_splat import BEVFeatureSplat
 from physics_atv_visual_mapping.terrain_estimation.processing_blocks.terrain_aware_bev_feature_splat import TerrainAwareBEVFeatureSplat
-from physics_atv_visual_mapping.terrain_estimation.processing_blocks.traversability_prototype_scores import TraversabilityPrototypeScore
 
-def setup_terrain_estimation_pipeline(config):
+def setup_terrain_estimation_pipeline(config, voxel_grid):
     blocks = []
     feature_keys = [] #keep track of feature keys to check validity of pipeline
 
     voxel_metadata = LocalMapperMetadata(**config["localmapping"]["metadata"])
-    voxel_n_features = config["localmapping"]["n_features"]
 
     for block_config in config["terrain_estimation"]:
         btype = block_config["type"]
         block_config["args"]["device"] = config["device"]
         block_config["args"]["voxel_metadata"] = voxel_metadata
-        block_config["args"]["voxel_n_features"] = voxel_n_features
+        block_config["args"]["voxel_feature_keys"] = voxel_grid.feature_keys
         
         if btype == "elevation_stats":
             block = ElevationStats(**block_config["args"])
@@ -48,15 +47,13 @@ def setup_terrain_estimation_pipeline(config):
             block = BEVFeatureSplat(**block_config["args"])
         elif btype == "terrain_aware_bev_feature_splat":
             block = TerrainAwareBEVFeatureSplat(**block_config["args"])
-        elif btype == "traversability_prototype_scores":
-            block = TraversabilityPrototypeScore(**block_config["args"])
         else:
             print('unknown terrain estimation block type {}'.format(btype))
             exit(1)
 
         blocks.append(block)
     
-    pipeline = TerrainEstimationPipeline(blocks=blocks, voxel_metadata=voxel_metadata, voxel_n_features=voxel_n_features, device=config["device"])
+    pipeline = TerrainEstimationPipeline(blocks=blocks, voxel_metadata=voxel_metadata, voxel_feature_keys=voxel_grid.feature_keys, device=config["device"])
     return pipeline
 
 class TerrainEstimationPipeline:
@@ -64,42 +61,50 @@ class TerrainEstimationPipeline:
     Main driver class for performing terrain estimation (in this scope, terrain estimation
     means extracting BEV features from a VoxelGrid)
     """
-    def __init__(self, blocks, voxel_metadata, voxel_n_features, device):
+    def __init__(self, blocks, voxel_metadata, voxel_feature_keys, device):
         self.blocks = blocks
         self.voxel_metadata = voxel_metadata
-        self.voxel_n_features = voxel_n_features
+        self.voxel_feature_keys = voxel_feature_keys
 
         self.bev_metadata = LocalMapperMetadata(
             origin=voxel_metadata.origin[:2],
             length=voxel_metadata.length[:2],
             resolution=voxel_metadata.resolution[:2],
         )
+
+        self.output_feature_keys = self.compute_feature_keys()
         self.device = device
 
-    def compute_feature_keys(self, voxel_grid):
+    def compute_feature_keys(self):
         """
         Precompute the set of output feature keys
         """
         fks = []
+        metainfo = []
         for block in self.blocks:
-            for fk in block.output_keys:
-                if fk not in fks:
-                    fks.append(fk)
-        return  fks
+            block_keys = block.output_feature_keys
+            for l,m in zip(block_keys.label, block_keys.metainfo):
+                if l not in fks:
+                    fks.append(l)
+                    metainfo.append(m)
+
+        return FeatureKeyList(
+            label=fks,
+            metainfo=metainfo
+        )
 
     def run(self, voxel_grid):
+        assert self.voxel_feature_keys == voxel_grid.feature_keys, f"Expected voxel fks {self.voxel_feature_keys}, got {voxel_grid.feature_keys}"
+
         bev_metadata = LocalMapperMetadata(
             origin=voxel_grid.metadata.origin[:2],
             length=voxel_grid.metadata.length[:2],
             resolution=voxel_grid.metadata.resolution[:2],
         )
 
-        bev_feature_keys = self.compute_feature_keys(voxel_grid)
-
         bev_grid = BEVGrid(
             metadata = bev_metadata,
-            n_features = len(bev_feature_keys),
-            feature_keys = bev_feature_keys,
+            feature_keys = self.output_feature_keys,
             device = self.device
         )
 

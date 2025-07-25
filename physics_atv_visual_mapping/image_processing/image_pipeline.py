@@ -71,17 +71,25 @@ class ImagePipeline:
         image = image.to(self.device).float()
         image_feats = image.clone()
         intrinsics_out = intrinsics.clone()
-
         for block in self.blocks:
             image_feats, intrinsics_out = block.run(image_feats, intrinsics_out, image)
 
         return image_feats, intrinsics_out
 
     def __repr__(self):
-        out = "ImagePipeline with:\n"
         for block in self.blocks:
             out += "\t" + str(block) + "\n"
         return out
+    
+    @property
+    def output_feature_keys(self):
+        """
+        Precompute image processing key of the last block in the pipeline   
+        """
+        if self.blocks:
+            return self.blocks[-1].output_feature_keys
+        else:
+            return None
 
 
 if __name__ == "__main__":

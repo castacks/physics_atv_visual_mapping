@@ -16,6 +16,7 @@ class BEVFeatureSplat(TerrainEstimationBlock):
         self.output_features = self.output_features[:self.n_features]
 
         self.voxel_to_bev_idxs = torch.tensor([voxel_feature_keys.index(k) for k in self.output_features.label], device=self.device)
+        assert len(self.voxel_to_bev_idxs) > 0, f"couldnt find metainfo key {self.metainfo_key} in voxel featurekeylist {voxel_feature_keys}"
 
     def to(self, device):
         self.device = device

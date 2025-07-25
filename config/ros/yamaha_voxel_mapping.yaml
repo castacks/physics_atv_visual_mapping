@@ -163,7 +163,7 @@ terrain_estimation:
         args:
             input_layer: terrain
             mask_layer: min_elevation_filtered_inflated_mask
-            radius: 1.0
+            radius: 0.25
             max_slope: 2.0
 
     -

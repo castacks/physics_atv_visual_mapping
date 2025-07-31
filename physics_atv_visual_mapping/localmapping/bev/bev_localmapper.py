@@ -17,7 +17,7 @@ ELEVATION_MAP_FEATURE_KEYS = FeatureKeyList(
 class BEVLocalMapper(LocalMapper):
     """Class for local mapping in BEV"""
 
-    def __init__(self, metadata, feature_keys, n_features, ema, overhang, device,):
+    def __init__(self, metadata, feature_keys, n_features, ema, overhang, do_overhang_cleanup, device):
         super().__init__(metadata, device)
         assert metadata.ndims == 2, "BEVLocalMapper requires 2d metadata"
         self.n_features = len(feature_keys) if n_features == -1 else n_features
@@ -33,6 +33,7 @@ class BEVLocalMapper(LocalMapper):
 
         self.ema = ema
         self.overhang = overhang
+        self.do_overhang_cleanup = do_overhang_cleanup
 
     def get_bev_map(self):
         """
@@ -77,7 +78,9 @@ class BEVLocalMapper(LocalMapper):
 
     def add_feature_pc(self, pos: torch.Tensor, feat_pc: FeaturePointCloudTorch):
         ## update elevation ##
-        elevation_grid_new = self.elevation_grid_from_pc(feat_pc, self.metadata)
+        feat_pc_filtered = self.filter_pc_with_terrain_map(feat_pc)
+
+        elevation_grid_new = self.elevation_grid_from_pc(feat_pc_filtered, self.metadata)
         min_elev_idx = ELEVATION_MAP_FEATURE_KEYS.index("min_elevation")
         max_elev_idx = ELEVATION_MAP_FEATURE_KEYS.index("max_elevation")
 
@@ -86,17 +89,26 @@ class BEVLocalMapper(LocalMapper):
             elevation_grid_new.data[..., min_elev_idx]
         )
 
+        #do an extra check to remove extraneous overhangs
+        #if prev diff > overhang and curr_diff < overhang, just overwrite curr max
+        prev_diff = self.elevation_grid.data[..., max_elev_idx] - self.elevation_grid.data[..., min_elev_idx]
+        curr_diff = elevation_grid_new.data[..., max_elev_idx] - elevation_grid_new.data[..., min_elev_idx]
+        mask = (prev_diff > self.overhang) & (curr_diff < self.overhang)
+
+        max_elev1 = elevation_grid_new.data[..., max_elev_idx]
+
         self.elevation_grid.data[..., max_elev_idx] = torch.maximum(
             self.elevation_grid.data[..., max_elev_idx],
             elevation_grid_new.data[..., max_elev_idx]
         )
 
+        if self.do_overhang_cleanup:
+            self.elevation_grid.data[..., max_elev_idx][mask] = max_elev1[mask]
+
         #TODO variance
 
         self.elevation_grid.hits += elevation_grid_new.hits
         self.elevation_grid.misses += elevation_grid_new.misses
-
-        feat_pc_filtered = self.filter_pc_with_terrain_map(feat_pc)
 
         ## merge features ##
         bev_grid_new = BEVGrid.from_feature_pc(feat_pc_filtered, self.metadata, self.n_features)

@@ -1,3 +1,4 @@
+import copy
 import torch
 
 from physics_atv_visual_mapping.localmapping.voxel.voxel_localmapper import VoxelGrid
@@ -19,7 +20,7 @@ def setup_terrain_estimation_pipeline(config, voxel_grid):
     blocks = []
     feature_keys = [] #keep track of feature keys to check validity of pipeline
 
-    voxel_metadata = LocalMapperMetadata(**config["localmapping"]["metadata"])
+    voxel_metadata = copy.deepcopy(voxel_grid.metadata)
 
     for block_config in config["terrain_estimation"]:
         btype = block_config["type"]

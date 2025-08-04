@@ -74,6 +74,9 @@ if __name__ == "__main__":
 
     dino_buf = []
 
+    base_label = image_pipeline.output_feature_keys.label[0].rsplit('_', 1)[0]
+    base_metainfo = image_pipeline.output_feature_keys.metainfo[0]
+
     # check to see if single run or dir of runs
     run_dirs = []
     if config['odometry']['folder'] in os.listdir(args.data_dir):
@@ -176,7 +179,7 @@ if __name__ == "__main__":
 
     U, S, V = torch.pca_lowrank(dino_feats_norm, q=args.pca_nfeats)
 
-    pca_res = {"mean": feat_mean.cpu(), "V": V.cpu()}
+    pca_res = {"mean": feat_mean.cpu(), "V": V.cpu(), "base_label": base_label, "base_metainfo": base_metainfo}
     torch.save(pca_res, args.save_to)
 
     dino_feats_proj = dino_feats_norm @ V

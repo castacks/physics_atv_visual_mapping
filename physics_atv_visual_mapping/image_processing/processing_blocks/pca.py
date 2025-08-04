@@ -13,8 +13,19 @@ class PCABlock(ImageProcessingBlock):
 
     def __init__(self, fp, models_dir, device):
         full_fp = os.path.join(models_dir, fp)
+        pca = torch.load(full_fp, weights_only=False)
+
+        if "base_label" in pca.keys():
+            self.base_label = pca["base_label"]
+            self.base_metainfo = pca["base_metainfo"]
+        #keep backward compatability with old pcas
+        else:
+            self.base_label = "pca"
+            self.base_metainfo = "vfm"
+
         self.pca = {
-            k: v.to(device) for k, v in torch.load(full_fp, weights_only=False).items()
+            "mean": pca["mean"].to(device),
+            "V": pca["V"].to(device),
         }
 
     def run(self, image, intrinsics, image_orig):
@@ -34,6 +45,6 @@ class PCABlock(ImageProcessingBlock):
     @property
     def output_feature_keys(self):
         return FeatureKeyList(
-            label=[f"pca_{i}" for i in range(self.pca["V"].shape[-1])],
+            label=[f"{self.base_label}_{i}" for i in range(self.pca["V"].shape[-1])],
             metainfo=["vfm" for i in range(self.pca["V"].shape[-1])]
         )

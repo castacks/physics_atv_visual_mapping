@@ -18,6 +18,7 @@ class Dinov2Block(ImageProcessingBlock):
         self, dino_type, dino_layers, image_insize, desc_facet, device, models_dir
     ):
         torch.hub.set_dir(os.path.join(models_dir, "torch_hub"))
+        self.dino_type = dino_type
 
         if "dino" in dino_type:
             dino_dir = os.path.join(models_dir, "torch_hub", "facebookresearch_dinov2_main")
@@ -55,6 +56,6 @@ class Dinov2Block(ImageProcessingBlock):
         n_layers = sum(self.dino.dino_model.embed_dim for layer in self.dino.layers)
 
         return FeatureKeyList(
-            label=[f"dino_{i}" for i in range(n_layers)],
+            label=[f"{self.dino_type}_{i}" for i in range(n_layers)],
             metainfo=["vfm" for i in range(n_layers)]
         )

@@ -13,6 +13,7 @@ from physics_atv_visual_mapping.terrain_estimation.processing_blocks.mrf_terrain
 from physics_atv_visual_mapping.terrain_estimation.processing_blocks.porosity import Porosity
 from physics_atv_visual_mapping.terrain_estimation.processing_blocks.slope import Slope
 from physics_atv_visual_mapping.terrain_estimation.processing_blocks.terrain_diff import TerrainDiff
+from physics_atv_visual_mapping.terrain_estimation.processing_blocks.bev_terrain_diff import BEVTerrainDiff
 from physics_atv_visual_mapping.terrain_estimation.processing_blocks.bev_feature_splat import BEVFeatureSplat
 from physics_atv_visual_mapping.terrain_estimation.processing_blocks.terrain_aware_bev_feature_splat import TerrainAwareBEVFeatureSplat
 
@@ -44,6 +45,8 @@ def setup_terrain_estimation_pipeline(config, voxel_grid):
             block = Slope(**block_config["args"])
         elif btype == "terrain_diff":
             block = TerrainDiff(**block_config["args"])
+        elif btype == "bev_terrain_diff":
+            block = BEVTerrainDiff(**block_config["args"])
         elif btype == "bev_feature_splat":
             block = BEVFeatureSplat(**block_config["args"])
         elif btype == "terrain_aware_bev_feature_splat":
@@ -94,7 +97,7 @@ class TerrainEstimationPipeline:
             metainfo=metainfo
         )
 
-    def run(self, voxel_grid):
+    def run(self, voxel_grid, input_bev_grid=None):
         assert self.voxel_feature_keys == voxel_grid.feature_keys, f"Expected voxel fks {self.voxel_feature_keys}, got {voxel_grid.feature_keys}"
 
         bev_metadata = LocalMapperMetadata(
@@ -103,11 +106,22 @@ class TerrainEstimationPipeline:
             resolution=voxel_grid.metadata.resolution[:2],
         )
 
-        bev_grid = BEVGrid(
-            metadata = bev_metadata,
-            feature_keys = self.output_feature_keys,
-            device = self.device
-        )
+        if input_bev_grid is not None:
+            assert not any([k in input_bev_grid.feature_keys for k in self.output_feature_keys])
+            bev_grid = BEVGrid(
+                metadata = bev_metadata,
+                feature_keys = input_bev_grid.feature_keys + self.output_feature_keys,
+                device = self.device
+            )
+
+            bev_grid.data[..., :len(input_bev_grid.feature_keys)] = input_bev_grid.data
+
+        else:
+            bev_grid = BEVGrid(
+                metadata = bev_metadata,
+                feature_keys = self.output_feature_keys,
+                device = self.device
+            )
 
         for block in self.blocks:
             block.run(voxel_grid, bev_grid)

@@ -8,9 +8,15 @@ class ElevationStats(TerrainEstimationBlock):
     """
     Compute a per-cell min and max height
     """
-    def __init__(self, voxel_metadata, voxel_feature_keys, device):
+    def __init__(self, voxel_metadata, voxel_feature_keys, use_voxel_centers=False, device='cpu'):
+        """
+        Args:
+            use_voxel_centers: if False, use the min/max z stored in the voxels to compute elev. if True, use the voxel center
+                (in 99% of cases, False is better)
+        """
         super().__init__(voxel_metadata, voxel_feature_keys, device)
-        
+        self.use_voxel_centers = use_voxel_centers
+
     def to(self, device):
         self.device = device
         return self
@@ -35,21 +41,29 @@ class ElevationStats(TerrainEstimationBlock):
 
         #bev grid idxs are the first 2 dims of the voxel idxs assuming matching metadata
         raster_idxs = voxel_grid_idxs[:, 0] * bev_grid.metadata.N[1] + voxel_grid_idxs[:, 1]
-        heights = voxel_grid_pts[:, 2]
+
+        if self.use_voxel_centers:
+            min_heights = voxel_grid_pts[:, 2]
+            mean_heights = voxel_grid_pts[:, 2]
+            max_heights = voxel_grid_pts[:, 2]
+        else:
+            min_heights = voxel_grid.min_coords[:, 2]
+            mean_heights = voxel_grid.midpoints[:, 2]
+            max_heights = voxel_grid.max_coords[:, 2]
 
         #scatter heights into grid
         num_cells = bev_grid.metadata.N[0] * bev_grid.metadata.N[1]
 
-        min_height = torch_scatter.scatter(src=heights, index=raster_idxs, dim_size=num_cells, reduce='min')
+        min_height = torch_scatter.scatter(src=min_heights, index=raster_idxs, dim_size=num_cells, reduce='min')
         bev_grid.data[..., min_height_idx] = min_height.view(*bev_grid.metadata.N)
 
-        mean_height = torch_scatter.scatter(src=heights, index=raster_idxs, dim_size=num_cells, reduce='mean')
+        mean_height = torch_scatter.scatter(src=mean_heights, index=raster_idxs, dim_size=num_cells, reduce='mean')
         bev_grid.data[..., mean_height_idx] = mean_height.view(*bev_grid.metadata.N)
 
-        max_height = torch_scatter.scatter(src=heights, index=raster_idxs, dim_size=num_cells, reduce='max')
+        max_height = torch_scatter.scatter(src=max_heights, index=raster_idxs, dim_size=num_cells, reduce='max')
         bev_grid.data[..., max_height_idx] = max_height.view(*bev_grid.metadata.N)
 
-        num_voxels = torch_scatter.scatter(src=torch.ones_like(heights), index=raster_idxs, dim_size=num_cells, reduce='sum')
+        num_voxels = torch_scatter.scatter(src=torch.ones_like(min_heights), index=raster_idxs, dim_size=num_cells, reduce='sum')
         bev_grid.data[..., num_voxels_idx] = num_voxels.view(*bev_grid.metadata.N)
 
         return bev_grid

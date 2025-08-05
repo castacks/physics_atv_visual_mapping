@@ -28,9 +28,8 @@ class VoxelLocalMapper(LocalMapper):
         Args:
             pose: [N] Tensor (we will take the first two elements as the new pose)
         """
-        new_origin = (
-            (pose[:3] + self.base_metadata.origin) // self.base_metadata.resolution
-        ) * self.base_metadata.resolution
+        #keep origin a multiple of resolution
+        new_origin = torch.round((pose[:3] + self.base_metadata.origin)/self.base_metadata.resolution) * self.base_metadata.resolution
         self.voxel_grid.metadata = self.metadata
 
         px_shift = torch.round(
@@ -119,6 +118,16 @@ class VoxelLocalMapper(LocalMapper):
         self.voxel_grid.hits = hit_buf
         self.voxel_grid.misses = miss_buf
 
+        min_coords_buf = 1e10 * torch.ones(unique_raster_idxs.shape[0], 3, device=self.voxel_grid.device)
+        min_coords_buf[vg1_inv_idxs] = torch.minimum(min_coords_buf[vg1_inv_idxs], self.voxel_grid.min_coords)
+        min_coords_buf[vg2_inv_idxs] = torch.minimum(min_coords_buf[vg2_inv_idxs], voxel_grid_new.min_coords)
+        self.voxel_grid.min_coords = min_coords_buf
+
+        max_coords_buf = -1e10 * torch.ones(unique_raster_idxs.shape[0], 3, device=self.voxel_grid.device)
+        max_coords_buf[vg1_inv_idxs] = torch.maximum(max_coords_buf[vg1_inv_idxs], self.voxel_grid.max_coords)
+        max_coords_buf[vg2_inv_idxs] = torch.maximum(max_coords_buf[vg2_inv_idxs], voxel_grid_new.max_coords)
+        self.voxel_grid.max_coords = max_coords_buf
+
         #compute passthrough rate
         passthrough_rate = self.voxel_grid.misses / (self.voxel_grid.hits + self.voxel_grid.misses)
 
@@ -148,6 +157,8 @@ class VoxelLocalMapper(LocalMapper):
 
         self.voxel_grid.hits = self.voxel_grid.hits[~cull_mask]
         self.voxel_grid.misses = self.voxel_grid.misses[~cull_mask]
+        self.voxel_grid.min_coords = self.voxel_grid.min_coords[~cull_mask]
+        self.voxel_grid.max_coords = self.voxel_grid.max_coords[~cull_mask]
         self.voxel_grid.raster_indices = self.voxel_grid.raster_indices[~cull_mask]
 
         feat_cull_mask = cull_mask[self.voxel_grid.feature_mask]
@@ -216,6 +227,10 @@ class VoxelGrid:
         feat_mask = torch.zeros(all_raster_idxs.shape[0], dtype=torch.bool, device=feat_pc.device)
         feat_mask[:n_feat_voxels] = True
 
+        #I need raster idxs to be sorted to do other downstream ops
+        all_raster_idxs, idxs = torch.sort(all_raster_idxs)
+        feat_mask = feat_mask[idxs]
+
         voxelgrid.raster_indices = all_raster_idxs
         voxelgrid.features = feat_buf
         voxelgrid.feature_mask = feat_mask
@@ -223,26 +238,23 @@ class VoxelGrid:
         voxelgrid.hits = torch.ones(all_raster_idxs.shape[0], device=voxelgrid.device)
         voxelgrid.misses = torch.zeros(all_raster_idxs.shape[0], device=voxelgrid.device)
 
+        #scatter min/max coords
+        all_pts = feat_pc.pts
+        all_grid_idxs, valid_mask = voxelgrid.get_grid_idxs(all_pts)
+        all_valid_pts = all_pts[valid_mask]
+        all_pts_raster_idxs = voxelgrid.grid_indices_to_raster_indices(all_grid_idxs[valid_mask])
+
+        pt_raster_idxs, inv_idxs = torch.unique(all_pts_raster_idxs, return_inverse=True, sorted=True)
+
+        voxelgrid.min_coords = torch_scatter.scatter(
+            src=all_valid_pts, index=inv_idxs, dim_size=all_raster_idxs.shape[0], reduce="min", dim=0
+        )
+
+        voxelgrid.max_coords = torch_scatter.scatter(
+            src=all_valid_pts, index=inv_idxs, dim_size=all_raster_idxs.shape[0], reduce="max", dim=0
+        )
+
         return voxelgrid
-
-    # def from_pc(pts, metadata):
-    #     voxelgrid = VoxelGrid(metadata, 0, pts.device)
-
-    #     grid_idxs, valid_mask = voxelgrid.get_grid_idxs(pts)
-    #     valid_grid_idxs = grid_idxs[valid_mask]
-
-    #     valid_raster_idxs = voxelgrid.grid_indices_to_raster_indices(valid_grid_idxs)
-
-    #     unique_raster_idxs, inv_idxs = torch.unique(
-    #         valid_raster_idxs, return_inverse=True
-    #     )
-
-    #     voxelgrid.all_indices = unique_raster_idxs
-
-    #     voxelgrid.hits = torch.ones(unique_raster_idxs.shape[0], device=voxelgrid.device)
-    #     voxelgrid.misses = torch.zeros(unique_raster_idxs.shape[0], device=voxelgrid.device)
-
-    #     return voxelgrid
 
     def __init__(self, metadata, feature_keys, device):
         self.metadata = metadata
@@ -261,6 +273,10 @@ class VoxelGrid:
         self.hits = torch.zeros(0, dtype=torch.float, device=device) + 1e-8
         self.misses = torch.zeros(0, dtype=torch.float, device=device)
 
+        #store min/max coords per voxel for more accurate reconstruction
+        self.min_coords = torch.zeros(0, 3, dtype=torch.float, device=device)
+        self.max_coords = torch.zeros(0, 3, dtype=torch.float, device=device)
+
         self.device = device
 
     @property
@@ -270,6 +286,22 @@ class VoxelGrid:
     @property
     def feature_raster_indices(self):
         return self.raster_indices[self.feature_mask]
+
+    @property
+    def midpoints(self):
+        """
+        Return the midpoints of all occupied voxels
+            (i.e. (max coords + min_coords) / 2.)
+        """
+        return 0.5 * (self.min_coords + self.max_coords)
+
+    @property
+    def feature_midpoints(self):
+        return 0.5 * (self.min_coords[self.feature_mask] + self.max_coords[self.feature_mask])
+
+    @property
+    def non_feature_midpoints(self):
+        return 0.5 * (self.min_coords[~self.feature_mask] + self.max_coords[~self.feature_mask])
 
     def get_grid_idxs(self, pts):
         """
@@ -298,6 +330,8 @@ class VoxelGrid:
         self.feature_mask = self.feature_mask[mask]
         self.hits = self.hits[mask]
         self.misses = self.misses[mask]
+        self.min_coords = self.min_coords[mask]
+        self.max_coords = self.max_coords[mask]
 
         self.metadata.origin += px_shift * self.metadata.resolution
 
@@ -344,6 +378,7 @@ class VoxelGrid:
         coords = grid_indices * self.metadata.resolution.view(
             1, 3
         ) + self.metadata.origin.view(1, 3)
+
         if centers:
             coords += (self.metadata.resolution / 2.0).view(1, 3)
 
@@ -381,20 +416,26 @@ class VoxelGrid:
 
         return torch.stack([xs, ys, zs], axis=-1)
 
-    def visualize(self, viz_all=True, sample_frac=1.0):
+    def visualize(self, viz_all=True, midpoints=True, sample_frac=1.0):
         pc = o3d.geometry.PointCloud()
-        pts = self.grid_indices_to_pts(
-            self.raster_indices_to_grid_indices(self.feature_raster_indices)
-        )
+        if midpoints:
+            pts = self.feature_midpoints
+        else:
+            pts = self.grid_indices_to_pts(
+                self.raster_indices_to_grid_indices(self.feature_raster_indices)
+            )
         colors = normalize_dino(self.features[:, :3])
 
         #all_indices is a superset of indices
         if viz_all:
-            non_colorized_idxs = self.non_feature_raster_indices
+            if midpoints:
+                non_colorized_pts = self.non_feature_midpoints
+            else:
+                non_colorized_idxs = self.non_feature_raster_indices
 
-            non_colorized_pts = self.grid_indices_to_pts(
-                self.raster_indices_to_grid_indices(non_colorized_idxs)
-            )
+                non_colorized_pts = self.grid_indices_to_pts(
+                    self.raster_indices_to_grid_indices(non_colorized_idxs)
+                )
 
             color_placeholder = 0.3 * torch.ones(non_colorized_pts.shape[0], 3, device=non_colorized_pts.device)
 
@@ -416,4 +457,6 @@ class VoxelGrid:
         self.features = self.features.to(device)
         self.hits = self.hits.to(device)
         self.misses = self.misses.to(device)
+        self.min_coords = self.min_coords.to(device)
+        self.max_coords = self.max_coords.to(device)
         return self

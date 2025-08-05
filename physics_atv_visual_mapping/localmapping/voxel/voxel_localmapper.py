@@ -28,9 +28,8 @@ class VoxelLocalMapper(LocalMapper):
         Args:
             pose: [N] Tensor (we will take the first two elements as the new pose)
         """
-        new_origin = (
-            (pose[:3] + self.base_metadata.origin) // self.base_metadata.resolution
-        ) * self.base_metadata.resolution
+        #keep origin a multiple of resolution
+        new_origin = torch.round((pose[:3] + self.base_metadata.origin)/self.base_metadata.resolution) * self.base_metadata.resolution
         self.voxel_grid.metadata = self.metadata
 
         px_shift = torch.round(

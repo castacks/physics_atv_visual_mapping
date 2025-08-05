@@ -215,6 +215,10 @@ class VoxelGrid:
         feat_mask = torch.zeros(all_raster_idxs.shape[0], dtype=torch.bool, device=feat_pc.device)
         feat_mask[:n_feat_voxels] = True
 
+        #I need raster idxs to be sorted to do other downstream ops
+        all_raster_idxs, idxs = torch.sort(all_raster_idxs)
+        feat_mask = feat_mask[idxs]
+
         voxelgrid.raster_indices = all_raster_idxs
         voxelgrid.features = feat_buf
         voxelgrid.feature_mask = feat_mask
@@ -223,25 +227,6 @@ class VoxelGrid:
         voxelgrid.misses = torch.zeros(all_raster_idxs.shape[0], device=voxelgrid.device)
 
         return voxelgrid
-
-    # def from_pc(pts, metadata):
-    #     voxelgrid = VoxelGrid(metadata, 0, pts.device)
-
-    #     grid_idxs, valid_mask = voxelgrid.get_grid_idxs(pts)
-    #     valid_grid_idxs = grid_idxs[valid_mask]
-
-    #     valid_raster_idxs = voxelgrid.grid_indices_to_raster_indices(valid_grid_idxs)
-
-    #     unique_raster_idxs, inv_idxs = torch.unique(
-    #         valid_raster_idxs, return_inverse=True
-    #     )
-
-    #     voxelgrid.all_indices = unique_raster_idxs
-
-    #     voxelgrid.hits = torch.ones(unique_raster_idxs.shape[0], device=voxelgrid.device)
-    #     voxelgrid.misses = torch.zeros(unique_raster_idxs.shape[0], device=voxelgrid.device)
-
-    #     return voxelgrid
 
     def __init__(self, metadata, feature_keys, device):
         self.metadata = metadata

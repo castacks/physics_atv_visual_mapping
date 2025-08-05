@@ -2,6 +2,11 @@
 
 Our implementation of voxel and BEV mapping, given lidar and camera.
 
+## Tests
+
+```cd tests```
+```python3 -m pytest```
+
 ## Usage
 
 ROS2: ```ros2 launch physics_atv_visual_mapping voxel_localmapping.launch.py```

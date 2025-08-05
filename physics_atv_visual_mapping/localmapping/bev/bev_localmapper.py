@@ -228,13 +228,13 @@ class BEVGrid:
         return bevgrid
 
     def __init__(self, metadata, feature_keys, device='cpu'):
-        self.metadata = metadata
+        self.metadata = metadata[:2]
         self.feature_keys = feature_keys
         self.n_features = len(self.feature_keys)
 
-        self.data = torch.zeros(*metadata.N, self.n_features, device=device)
-        self.hits = torch.zeros(*metadata.N, device=device, dtype=torch.long)
-        self.misses = torch.zeros(*metadata.N, device=device, dtype=torch.long)
+        self.data = torch.zeros(*self.metadata.N, self.n_features, device=device)
+        self.hits = torch.zeros(*self.metadata.N, device=device, dtype=torch.long)
+        self.misses = torch.zeros(*self.metadata.N, device=device, dtype=torch.long)
         self.device = device
 
     @property

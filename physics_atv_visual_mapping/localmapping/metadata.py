@@ -25,6 +25,22 @@ class LocalMapperMetadata:
             self.origin, self.length, self.resolution, self.N
         )
 
+    def __getitem__(self, idx):
+        if isinstance(idx, int):
+            return LocalMapperMetadata(
+                origin=self.origin[[idx]],
+                length=self.length[[idx]],
+                resolution=self.resolution[[idx]],
+                device=self.device
+            )
+        else:
+            return LocalMapperMetadata(
+                origin=self.origin[idx],
+                length=self.length[idx],
+                resolution=self.resolution[idx],
+                device=self.device
+            )
+
     def to(self, device):
         self.device = device
         self.origin = self.origin.to(device)

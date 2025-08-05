@@ -182,6 +182,13 @@ def test_point_insert(voxel_insert_data):
     pc = voxel_insert_data['feat_pc']
     voxel_grid = voxel_insert_data['localmapper'].voxel_grid
 
+    N = voxel_grid.raster_indices.shape[0]
+    assert voxel_grid.feature_mask.shape[0] == N
+    assert voxel_grid.hits.shape[0] == N
+    assert voxel_grid.misses.shape[0] == N
+    assert voxel_grid.min_coords.shape[0] == N
+    assert voxel_grid.max_coords.shape[0] == N
+
     ## theres a lot of ops that can only be efficient if raster idxs are sorted.
     sorted_idxs, _ = torch.sort(voxel_grid.raster_indices.clone())
     assert (sorted_idxs == voxel_grid.raster_indices).all()
@@ -236,6 +243,13 @@ def test_voxel_merge(voxel_merge_data):
 
     voxel_grid = voxel_merge_data['localmapper'].voxel_grid
 
+    N = voxel_grid.raster_indices.shape[0]
+    assert voxel_grid.feature_mask.shape[0] == N
+    assert voxel_grid.hits.shape[0] == N
+    assert voxel_grid.misses.shape[0] == N
+    assert voxel_grid.min_coords.shape[0] == N
+    assert voxel_grid.max_coords.shape[0] == N
+
     ## double check that stuff stays sorted
     sorted_idxs, _ = torch.sort(voxel_grid.raster_indices.clone())
     assert (sorted_idxs == voxel_grid.raster_indices).all()
@@ -271,6 +285,13 @@ def test_voxel_shift(voxel_shift_data):
     voxel_grid = voxel_shift_data['localmapper'].voxel_grid
     base_metadata = voxel_shift_data['metadata']
     new_metadata = voxel_grid.metadata
+
+    N = voxel_grid.raster_indices.shape[0]
+    assert voxel_grid.feature_mask.shape[0] == N
+    assert voxel_grid.hits.shape[0] == N
+    assert voxel_grid.misses.shape[0] == N
+    assert voxel_grid.min_coords.shape[0] == N
+    assert voxel_grid.max_coords.shape[0] == N
 
     assert torch.allclose(pos[:3] + base_metadata.origin, new_metadata.origin)
     assert torch.allclose(base_metadata.resolution, new_metadata.resolution)

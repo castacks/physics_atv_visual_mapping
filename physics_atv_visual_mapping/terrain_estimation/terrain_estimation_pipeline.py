@@ -12,6 +12,8 @@ from physics_atv_visual_mapping.terrain_estimation.processing_blocks.terrain_inf
 from physics_atv_visual_mapping.terrain_estimation.processing_blocks.mrf_terrain_estimation import MRFTerrainEstimation
 from physics_atv_visual_mapping.terrain_estimation.processing_blocks.porosity import Porosity
 from physics_atv_visual_mapping.terrain_estimation.processing_blocks.slope import Slope
+from physics_atv_visual_mapping.terrain_estimation.processing_blocks.terrain_normals_gradient import TerrainNormalsGradient
+from physics_atv_visual_mapping.terrain_estimation.processing_blocks.terrain_normals_pca import TerrainNormalsPCA
 from physics_atv_visual_mapping.terrain_estimation.processing_blocks.terrain_diff import TerrainDiff
 from physics_atv_visual_mapping.terrain_estimation.processing_blocks.bev_terrain_diff import BEVTerrainDiff
 from physics_atv_visual_mapping.terrain_estimation.processing_blocks.bev_feature_splat import BEVFeatureSplat
@@ -43,6 +45,10 @@ def setup_terrain_estimation_pipeline(config, voxel_grid):
             block = Porosity(**block_config["args"])
         elif btype == "slope":
             block = Slope(**block_config["args"])
+        elif btype == "normals_sobel":
+            block = TerrainNormalsGradient(**block_config["args"])
+        elif btype == "normals_pca":
+            block = TerrainNormalsPCA(**block_config["args"])
         elif btype == "terrain_diff":
             block = TerrainDiff(**block_config["args"])
         elif btype == "bev_terrain_diff":

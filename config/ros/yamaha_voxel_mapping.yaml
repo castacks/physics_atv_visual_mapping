@@ -164,6 +164,20 @@ terrain_estimation:
             mask_layer: min_elevation_filtered_inflated_mask
             radius: 0.25
             max_slope: 2.0
+            kernel_type: scharr
+
+    - 
+        type: normals_sobel
+        args:
+            slope_x_layer: slope_x
+            slope_y_layer: slope_y
+            mask_layer: min_elevation_filtered_inflated_mask
+
+    # - 
+    #     type: normals_pca
+    #     args:
+    #         terrain_layer: terrain
+    #         mask_layer: min_elevation_filtered_inflated_mask
 
     -
         type: terrain_diff

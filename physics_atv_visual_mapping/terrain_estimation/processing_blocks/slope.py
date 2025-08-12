@@ -9,23 +9,26 @@ class Slope(TerrainEstimationBlock):
     """
     Compute a per-cell min and max height
     """
-    def __init__(self, voxel_metadata, voxel_feature_keys, input_layer, mask_layer, radius, max_slope=1e10, device='cpu'):
+    def __init__(self, voxel_metadata, voxel_feature_keys, input_layer, mask_layer, radius, kernel_type, max_slope=1e10, device='cpu'):
+        assert kernel_type in ['sobel', 'scharr']
+
         super().__init__(voxel_metadata, voxel_feature_keys, device)
         self.input_layer = input_layer
         self.mask_layer = mask_layer
+        self.kernel_type = kernel_type
 
         #allow for optional cap of max slope to reduce noise/
         #be a better learning feature
         self.max_slope = max_slope
 
-        self.sobel_x = setup_kernel(
-            kernel_type="sobel_x",
+        self.gradient_x = setup_kernel(
+            kernel_type=f"{kernel_type}_x",
             kernel_radius=radius,
             metadata=voxel_metadata,
         ).to(self.device)
 
-        self.sobel_y = setup_kernel(
-            kernel_type="sobel_y",
+        self.gradient_y = setup_kernel(
+            kernel_type=f"{kernel_type}_y",
             kernel_radius=radius,
             metadata=voxel_metadata,
         ).to(self.device)

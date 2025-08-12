@@ -3,9 +3,11 @@ import torch
 from physics_atv_visual_mapping.terrain_estimation.processing_blocks.base import TerrainEstimationBlock
 
 class TerrainNormalsPCA(TerrainEstimationBlock):
-
-    def __init__(self, voxel_metadata, voxel_n_features, terrain_layer, mask_layer, device='cpu'):
-        super().__init__(voxel_metadata, voxel_n_features, device)
+    """
+    Compute terrain normals via SVD on elevation
+    """
+    def __init__(self, voxel_metadata, voxel_feature_keys, terrain_layer, mask_layer, device='cpu'):
+        super().__init__(voxel_metadata, voxel_feature_keys, device)
         self.terrain_layer = terrain_layer
         self.mask_layer = mask_layer
 
@@ -74,26 +76,27 @@ class TerrainNormalsPCA(TerrainEstimationBlock):
         normals_z[~mask] = 0
 
         # Store computed normals into BEV grid output
-
-        normals_x_idx = bev_grid.feature_keys.index(self.output_keys[0])
+        normals_x_idx = bev_grid.feature_keys.index(self.output_feature_keys.label[0])
         bev_grid.data[..., normals_x_idx] = normals_x
 
-        normals_y_idx = bev_grid.feature_keys.index(self.output_keys[1])
+        normals_y_idx = bev_grid.feature_keys.index(self.output_feature_keys.label[1])
         bev_grid.data[..., normals_y_idx] = normals_y
 
-        normals_z_idx = bev_grid.feature_keys.index(self.output_keys[2])
+        normals_z_idx = bev_grid.feature_keys.index(self.output_feature_keys.label[2])
         bev_grid.data[..., normals_z_idx] = normals_z
 
         return bev_grid
 
-
     @property
-    def output_keys(self):
+    def output_feature_keys(self):
         """
         define the layer keys to output to 
         Note that for some layers such as BEVSplat, the output keys depend on the input
         """
-        return ['normals_x','normals_y','normals_z']
+        return FeatureKeyList(
+            label = ['normal_x','normal_y','normal_z'],
+            metainfo = ['terrain_estimation'] * 3
+        )
 
     def to(self, device):
         self.device = device

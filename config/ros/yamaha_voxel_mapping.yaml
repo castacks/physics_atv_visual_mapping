@@ -34,47 +34,40 @@ gridmap:
 vehicle_frame: vehicle 
 
 image_processing:
-    -
-        type: dino
-        args:
-            dino_type: dinov2_vitb14_reg
-            dino_layers: [10]
-            image_insize: [854, 448]
-
-            desc_facet: value
-    - 
-        type: pca
-        args:
-            fp: physics_atv_visual_mapping/pca/vitb_reg_64_gascola_veg.pt
-
     # -
-    #     type: radio_lang
+    #     type: dino
     #     args:
-    #         image_insize: [848, 448]
-    #         radio_type: c-radio_v3-b
-    #         adaptor_type: siglip2
+    #         dino_type: dinov2_vitb14_reg
+    #         dino_layers: [10]
+    #         image_insize: [854, 448]
 
+    #         desc_facet: value
     # - 
     #     type: pca
     #     args:
-    #         fp: physics_atv_visual_mapping/pca/radio_v3b_siglip2.pt
+    #         fp: physics_atv_visual_mapping/pca/vitb_reg_64_gascola_veg.pt
+
+    -
+        type: radio_lang
+        args:
+            image_insize: [848, 448]
+            radio_type: c-radio_v3-b
+            adaptor_type: siglip2
+
+    - 
+        type: pca
+        args:
+            fp: physics_atv_visual_mapping/pca/radio_v3b_siglip2.pt
 
 # voxel
 localmapping:
     mapper_type: voxel
-    layer_key: dino
     ema: 0.5 #higher->use recent more
     n_features: -1
     metadata:
-        # origin: [-100., -100., -30.]
-        # length: [200., 200., 60.]
-        # resolution: [0.8, 0.8, 0.8]
         origin: [-50., -50., -10.]
         length: [100., 100., 20.]
         resolution: [0.4, 0.4, 0.1]
-        # origin: [-30., -30., -15.]
-        # length: [60., 60., 30.]
-        # resolution: [0.2, 0.2, 0.2]
 
     raytracer:
         type: frustum
@@ -96,7 +89,8 @@ localmapping:
 terrain_estimation:
     -
         type: elevation_stats
-        args: {}
+        args:
+            use_voxel_centers: false
 
     -
         type: porosity
@@ -131,7 +125,7 @@ terrain_estimation:
             kernel_params:
                 kernel_type: gaussian #one of {gaussian/box} the kernel type to use for inflation
 
-                kernel_radius: 1. #kernel radius in m
+                kernel_radius: 5. #kernel radius in m
                 kernel_sharpness: 2. #sharpness of (Gaussian) kernel
 
                 # kernel_radius: 0.5 #kernel radius in m
@@ -164,6 +158,14 @@ terrain_estimation:
             mask_layer: min_elevation_filtered_inflated_mask
             radius: 0.25
             max_slope: 2.0
+            kernel_type: scharr
+
+    - 
+        type: normals_sobel
+        args:
+            slope_x_layer: slope_x
+            slope_y_layer: slope_y
+            mask_layer: min_elevation_filtered_inflated_mask
 
     -
         type: terrain_diff

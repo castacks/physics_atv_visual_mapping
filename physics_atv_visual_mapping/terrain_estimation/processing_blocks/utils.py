@@ -28,6 +28,18 @@ def setup_kernel(metadata, kernel_type='box', kernel_radius=1., kernel_sharpness
         return sobel_x_kernel(kernel_dx)
     elif kernel_type=='sobel_y':
         return sobel_y_kernel(kernel_dx)
+    elif kernel_type=='scharr_x':
+        return torch.tensor([
+            [-3., -10., -3.],
+            [0., 0., 0.],
+            [3., 10., 3.]
+        ])/32
+    elif kernel_type=='scharr_y':
+        return torch.tensor([
+            [-3., 0., 3.],
+            [-10., 0., 10.],
+            [-3., 0., 3.]
+        ])/32
 
 def box_kernel(rad):
     return torch.ones(2*rad[0]+1, 2*rad[1]+1)
@@ -48,6 +60,10 @@ def gaussian_kernel(rad, sharp):
 
 #https://stackoverflow.com/questions/9567882/sobel-filter-kernel-of-large-size
 def sobel_x_kernel(rad):
+    """
+    Since we care about metric stuff being right, divide by correction factor
+    https://www.researchgate.net/publication/239398674_An_Isotropic_3x3_Image_Gradient_Operator
+    """
     dxs = torch.arange(-rad[0], rad[0]+1)
     dys = torch.arange(-rad[1], rad[1]+1)
 
@@ -56,10 +72,15 @@ def sobel_x_kernel(rad):
 
     kernel = torch.arange(-rad[0], rad[0]+1).view(-1, 1).tile(1, 2*rad[0]+1)
     kernel = kernel / (ds + 1e-6)
+    kernel = kernel / kernel.abs().sum()
 
     return kernel
 
 def sobel_y_kernel(rad):
+    """
+    Since we care about metric stuff being right, divide by correction factor
+    https://www.researchgate.net/publication/239398674_An_Isotropic_3x3_Image_Gradient_Operator
+    """
     dxs = torch.arange(-rad[0], rad[0]+1)
     dys = torch.arange(-rad[1], rad[1]+1)
 
@@ -68,6 +89,7 @@ def sobel_y_kernel(rad):
 
     kernel = torch.arange(-rad[0], rad[0]+1).view(1, -1).tile(2*rad[1]+1, 1)
     kernel = kernel / (ds + 1e-6)
+    kernel = kernel / kernel.abs().sum()
 
     return kernel
 

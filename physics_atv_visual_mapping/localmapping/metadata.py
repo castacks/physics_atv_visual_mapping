@@ -20,6 +20,12 @@ class LocalMapperMetadata:
         self.ndims = self.origin.shape[0]
         self.device = device
 
+    def get_coords(self):
+        coords_1d = [
+            self.origin[i] + torch.arange(self.N[i], device=self.origin.device) * self.resolution[i] for i in range(self.ndims)
+        ]
+        return torch.stack(torch.meshgrid(*coords_1d, indexing='ij'), dim=-1)
+
     def __repr__(self):
         return "LocalMapperMetadata with \n\tOrigin: {}\n\tLength: {}\n\tResolution: {}\n\t(N: {})".format(
             self.origin, self.length, self.resolution, self.N

@@ -7,6 +7,8 @@ from numpy import pi as PI
 from ros_torch_converter.datatypes.pointcloud import FeaturePointCloudTorch
 
 from physics_atv_visual_mapping.localmapping.base import LocalMapper
+from physics_atv_visual_mapping.localmapping.metadata import LocalMapperMetadata
+from physics_atv_visual_mapping.feature_key_list import FeatureKeyList
 from physics_atv_visual_mapping.utils import *
 
 class VoxelLocalMapper(LocalMapper):
@@ -416,6 +418,71 @@ class VoxelGrid:
 
         return torch.stack([xs, ys, zs], axis=-1)
 
+    def random_init(device='cpu'):
+        metadata = LocalMapperMetadata.random_init(ndim=3, device=device)
+
+        fks = FeatureKeyList(
+            label=[f'rand_{i}' for i in range(5)],
+            metainfo=['feat'] * 5
+        )
+
+        maxn = torch.prod(metadata.N)
+        nvox = int(maxn/2)
+        nfeats = int(nvox/2)
+
+        raster_idxs = torch.randperm(maxn, device=device)[:nvox]
+        feats = torch.randn(nfeats, 5, device=device)
+
+        mask_idxs = torch.randperm(nvox)[:nfeats]
+        mask = torch.zeros(len(raster_idxs), dtype=torch.bool, device=device)
+        mask[mask_idxs] = True
+
+        hits = (10. * torch.rand(nvox, device=device)).long()
+        misses = (10. * torch.rand(nvox, device=device)).long()
+
+        voxel_grid = VoxelGrid(metadata, fks, device=device)
+        voxel_grid.raster_indices = raster_idxs
+        voxel_grid.feature_mask = mask
+        voxel_grid.features = feats
+        voxel_grid.hits = hits
+        voxel_grid.misses = misses
+
+        voxel_centers = voxel_grid.grid_indices_to_pts(voxel_grid.raster_indices_to_grid_indices(raster_idxs))
+        voxel_grid.min_coords = voxel_centers - metadata.resolution/2.
+        voxel_grid.max_coords = voxel_centers + metadata.resolution/2.
+
+        return voxel_grid
+
+    def __eq__(self, other):
+        if self.feature_keys != other.feature_keys:
+            return False
+
+        if self.metadata != other.metadata:
+            return False
+
+        if not (self.raster_indices == other.raster_indices).all():
+            return False
+
+        if not (self.feature_mask == other.feature_mask).all():
+            return False
+
+        if not torch.allclose(self.features, other.features):
+            return False
+
+        if not (self.hits == other.hits).all():
+            return False
+
+        if not (self.misses == other.misses).all():
+            return False
+
+        if not torch.allclose(self.min_coords, other.min_coords):
+            return False
+
+        if not torch.allclose(self.max_coords, other.max_coords):
+            return False
+
+        return True
+
     def visualize(self, viz_all=True, midpoints=True, sample_frac=1.0):
         pc = o3d.geometry.PointCloud()
         if midpoints:
@@ -454,6 +521,7 @@ class VoxelGrid:
     def to(self, device):
         self.device = device
         self.raster_indices = self.raster_indices.to(device)
+        self.feature_mask = self.feature_mask.to(device)
         self.features = self.features.to(device)
         self.hits = self.hits.to(device)
         self.misses = self.misses.to(device)

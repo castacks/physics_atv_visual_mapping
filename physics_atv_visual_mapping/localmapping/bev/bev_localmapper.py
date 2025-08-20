@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 from ros_torch_converter.datatypes.pointcloud import FeaturePointCloudTorch
 
 from physics_atv_visual_mapping.localmapping.base import LocalMapper
+from physics_atv_visual_mapping.localmapping.metadata import LocalMapperMetadata
 from physics_atv_visual_mapping.feature_key_list import FeatureKeyList
 from physics_atv_visual_mapping.utils import *
 
@@ -236,6 +237,40 @@ class BEVGrid:
         self.hits = torch.zeros(*self.metadata.N, device=device, dtype=torch.long)
         self.misses = torch.zeros(*self.metadata.N, device=device, dtype=torch.long)
         self.device = device
+
+    def random_init(device='cpu'):
+        metadata = LocalMapperMetadata.random_init(ndim=2, device=device)
+
+        fks = FeatureKeyList(
+            label=[f'rand_{i}' for i in range(5)],
+            metainfo=['feat'] * 5
+        )
+
+        bevgrid = BEVGrid(metadata, fks)
+        bevgrid.data = torch.randn_like(bevgrid.data)
+        bevgrid.hits = (10. * torch.rand(*metadata.N, device=device)).long()
+        bevgrid.misses = (10. * torch.rand(*metadata.N, device=device)).long()
+
+        return bevgrid
+
+    def __eq__(self, other):
+        if self.feature_keys != other.feature_keys:
+            return False
+
+        if self.metadata != other.metadata:
+            return False
+
+        if not torch.allclose(self.data, other.data):
+            return False
+
+        #TODO we need to save/load these from kitti
+        # if not (self.hits == other.hits).all():
+        #     return False
+
+        # if not (self.misses == other.misses).all():
+        #     return False
+
+        return True
 
     @property
     def known(self):

@@ -26,6 +26,32 @@ class LocalMapperMetadata:
         ]
         return torch.stack(torch.meshgrid(*coords_1d, indexing='ij'), dim=-1)
 
+    def random_init(ndim, device='cpu'):
+        origin = torch.rand(ndim) * -10.
+        resolution = torch.rand(ndim) + 0.5
+        N = torch.randint(40, size=(ndim,))
+        length = resolution * N
+        return LocalMapperMetadata(
+            origin=origin,
+            length=length,
+            resolution=resolution
+        ).to(device)
+
+    def __eq__(self, other):
+        if self.ndims != other.ndims:
+            return False
+
+        if not torch.allclose(self.origin, other.origin):
+            return False
+
+        if not torch.allclose(self.length, other.length):
+            return False
+
+        if not torch.allclose(self.resolution, other.resolution):
+            return False
+        
+        return True
+
     def __repr__(self):
         return "LocalMapperMetadata with \n\tOrigin: {}\n\tLength: {}\n\tResolution: {}\n\t(N: {})".format(
             self.origin, self.length, self.resolution, self.N

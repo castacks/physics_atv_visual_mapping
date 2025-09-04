@@ -190,19 +190,48 @@ class VoxelGrid:
 
         valid_raster_idxs = voxelgrid.grid_indices_to_raster_indices(valid_grid_idxs)
         
-        valid_raster_idxs, sort_idxs = valid_raster_idxs.sort()
+        sort_idxs = valid_raster_idxs.argsort()
+
+        valid_raster_idxs = valid_raster_idxs[sort_idxs]
         valid_feats = valid_feats[sort_idxs]
         valid_dists = valid_dists[sort_idxs]
-        feature_raster_idxs, cnts = valid_raster_idxs.unique(return_counts=True, sorted=True)
+        feature_raster_idxs, inv_idxs = valid_raster_idxs.unique(return_inverse=True, sorted=True)
 
-        #make a jagged tensor of feats and dists
-        #if the raster idxs are sorted, then the offsets are the cnts from unique
-        jagged_dists = torch.nested.nested_tensor_from_jagged(values=valid_dists, lengths=cnts)
-        jagged_feats = torch.nested.nested_tensor_from_jagged(values=valid_feats, lengths=cnts, jagged_dim=1)
-        mindist_idxs = jagged_dists.argmin(dim=1)
-        mindist_feats = jagged_feats.values()[jagged_feats.offsets()[:-1]+mindist_idxs]
+        raster_mindists = torch_scatter.scatter(
+            src=valid_dists,
+            index=inv_idxs,
+            dim_size=feature_raster_idxs.shape[0],
+            reduce='min'
+        )
 
-        return feature_raster_idxs, mindist_feats
+        voxel_is_mindist = (valid_dists - raster_mindists[inv_idxs]).abs() < 1e-16
+        if voxel_is_mindist.sum() != feature_raster_idxs.shape[0]:
+            print("uh oh not all voxels have a mindist")
+
+        voxel_is_mindist = voxel_is_mindist.float().unsqueeze(-1)
+
+        feat_buf = torch_scatter.scatter(
+            src=valid_feats * voxel_is_mindist,
+            index=inv_idxs,
+            dim_size=feature_raster_idxs.shape[0],
+            reduce="sum",
+            dim=0
+        )
+
+        ## need to do an extra scatter of the mask to handle cases where voxel_is_mindist True for multiple pts in voxel
+        ## e.g. if the same point is in there twice
+        ## hopefully same spatial pos -> same feature, otherwise tough luck :)
+        cnt = torch_scatter.scatter(
+            src=voxel_is_mindist,
+            index=inv_idxs,
+            dim_size=feature_raster_idxs.shape[0],
+            reduce="sum",
+            dim=0
+        )
+
+        voxel_feats = feat_buf / cnt
+
+        return feature_raster_idxs, voxel_feats
 
     def _get_voxel_features_scatter(voxelgrid, pts, features):
         grid_idxs, valid_mask = voxelgrid.get_grid_idxs(pts)
@@ -234,9 +263,8 @@ class VoxelGrid:
 
         voxelgrid = VoxelGrid(metadata, feat_keys, feat_pc.device)
 
-        feature_pts = feat_pc.feature_pts
-        feature_pts_features = feat_pc.features[:, :n_features]
-        non_feature_pts = feat_pc.non_feature_pts
+        feature_pts = feat_pc.feature_pts.clone()
+        feature_pts_features = feat_pc.features[:, :n_features].clone()
 
         #first scatter and average the feature points
         if strategy == 'avg':
@@ -246,9 +274,15 @@ class VoxelGrid:
         elif strategy == 'mindist':
             feature_raster_idxs, voxel_features = VoxelGrid._get_voxel_features_mindist(
                 voxelgrid, feature_pts, feature_pts_features, pos
+                # voxelgrid.to('cpu'), feature_pts.to('cpu'), feature_pts_features.to('cpu'), pos.to('cpu')
             )
 
+        # voxelgrid = voxelgrid.to('cuda')
+        # feature_raster_idxs = feature_raster_idxs.to('cuda')
+        # voxel_features = voxel_features.to('cuda')
+
         #then add in non-feature points
+        non_feature_pts = feat_pc.non_feature_pts.clone()
         grid_idxs, valid_mask = voxelgrid.get_grid_idxs(non_feature_pts)
         valid_grid_idxs = grid_idxs[valid_mask]
         valid_raster_idxs = voxelgrid.grid_indices_to_raster_indices(valid_grid_idxs)
@@ -555,6 +589,7 @@ class VoxelGrid:
 
     def to(self, device):
         self.device = device
+        self.metadata = self.metadata.to(device)
         self.raster_indices = self.raster_indices.to(device)
         self.feature_mask = self.feature_mask.to(device)
         self.features = self.features.to(device)

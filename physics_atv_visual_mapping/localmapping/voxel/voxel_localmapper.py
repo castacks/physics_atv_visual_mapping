@@ -20,10 +20,13 @@ class VoxelLocalMapper(LocalMapper):
         self.n_features = len(feature_keys) if n_features == -1 else n_features
         self.feature_keys = feature_keys[:self.n_features]
 
+        assert ema >= 0. and ema <= 1.
+
         self.voxel_grid = VoxelGrid(self.metadata, self.feature_keys, device)
         self.raytracer = raytracer
         self.do_raytrace = self.raytracer is not None
         self.ema = ema
+        self.assert_feat_match = True
 
     def update_pose(self, pose: torch.Tensor):
         """
@@ -43,7 +46,8 @@ class VoxelLocalMapper(LocalMapper):
     def add_feature_pc(self, pos: torch.Tensor, feat_pc: FeaturePointCloudTorch, do_raytrace=False, debug=False):
         voxel_grid_new = VoxelGrid.from_feature_pc(feat_pc, self.metadata, self.n_features, pos, strategy='mindist')
 
-        assert self.voxel_grid.feature_keys == voxel_grid_new.feature_keys, f"voxel feat key mismatch: mapper has {self.voxel_grid.feature_keys}, added pc has {voxel_grid_new.feature_keys}"
+        if self.assert_feat_match:
+            assert self.voxel_grid.feature_keys == voxel_grid_new.feature_keys, f"voxel feat key mismatch: mapper has {self.voxel_grid.feature_keys}, added pc has {voxel_grid_new.feature_keys}"
 
         if self.do_raytrace:
             # self.raytracer.raytrace(pos, voxel_grid_meas=voxel_grid_new, voxel_grid_agg=self.voxel_grid)
@@ -76,10 +80,12 @@ class VoxelLocalMapper(LocalMapper):
         )
         vg1_feat_buf_mask = torch.zeros(vg1_feat_buf.shape[0], dtype=torch.bool, device=self.voxel_grid.device)
 
-        vg2_feat_buf = vg1_feat_buf.clone()
+        vg2_feat_buf = torch.zeros(
+            unique_feature_raster_idxs.shape[0],
+            voxel_grid_new.features.shape[-1],
+            device=self.voxel_grid.device,
+        )
         vg2_feat_buf_mask = vg1_feat_buf_mask.clone()
-
-        feat_buf = vg1_feat_buf.clone()
 
         #first copy over the original features
         vg1_feat_buf[vg1_feat_inv_idxs] += self.voxel_grid.features
@@ -89,10 +95,7 @@ class VoxelLocalMapper(LocalMapper):
         vg2_feat_buf_mask[vg2_feat_inv_idxs] = True
 
         #apply ema
-        ema_mask = vg1_feat_buf_mask & vg2_feat_buf_mask
-        feat_buf[vg1_feat_buf_mask & ~ema_mask] = vg1_feat_buf[vg1_feat_buf_mask & ~ema_mask]
-        feat_buf[vg2_feat_buf_mask & ~ema_mask] = vg2_feat_buf[vg2_feat_buf_mask & ~ema_mask]
-        feat_buf[ema_mask] = (1.-self.ema) * vg1_feat_buf[ema_mask] + self.ema * vg2_feat_buf[ema_mask]
+        feat_buf = self._merge_voxel_features(vg1_feat_buf, vg1_feat_buf_mask, vg2_feat_buf, vg2_feat_buf_mask)
 
         #ok now i have the merged features and the final raster idxs. need to make the mask
         feature_mask = torch.zeros(unique_raster_idxs.shape[0], dtype=torch.bool, device=self.voxel_grid.device)
@@ -167,6 +170,26 @@ class VoxelLocalMapper(LocalMapper):
         self.voxel_grid.features = self.voxel_grid.features[~feat_cull_mask]
         self.voxel_grid.feature_mask = self.voxel_grid.feature_mask[~cull_mask]
 
+    def _merge_voxel_features(self, vg1_feats, vg1_mask, vg2_feats, vg2_mask):
+        """
+        Merge voxel grid features together with EMA
+        Args:
+            vg1_feats: [NxF] Tensor of raster feats from voxel grid 1. Note that this should be raster-padded w/ vg2
+                (i.e. this is after the cat+uniq op)
+            vg1_mask:  [N] Tensor which is True iff. that raster idx has a feature in vg1
+            vg2_feats: Same as vg1_feats for vg2
+            vg2_mask:  Same as vg1_mask for vg2
+        Returns:
+            feats_out: [NxF] Tensor of merged features for all unique raster indices
+        """
+        feats_out = vg1_feats.clone()
+        merge_mask = vg1_mask & vg2_mask
+        feats_out[vg1_mask & ~merge_mask] = vg1_feats[vg1_mask & ~merge_mask]
+        feats_out[vg2_mask & ~merge_mask] = vg2_feats[vg2_mask & ~merge_mask]
+        feats_out[merge_mask] = (1.-self.ema) * vg1_feats[merge_mask] + self.ema * vg2_feats[merge_mask]
+
+        return feats_out
+
     def to(self, device):
         self.device = device
         self.voxel_grid = self.voxel_grid.to(device)
@@ -175,6 +198,70 @@ class VoxelLocalMapper(LocalMapper):
             self.raytracer = self.raytracer.to(device)
         return self
 
+class VoxelCoordinateLocalMapper(VoxelLocalMapper):
+    """
+    Voxel localmapper class that maps image coordinates instead of features directly
+    This requires us to implement a slightly different merge rule (list update instead of EMA)
+    """
+    def __init__(self, metadata, feature_keys, ema, raytracer=None, n_features=-1, max_n_coords=10, device='cpu'):
+        """
+        Args:
+            max_n_coords: the maximum amount of image feats that a voxel can pull from
+                note that with 0.5 ema, 7 coords is sufficient for >1% err
+        """
+        self.input_feature_keys = feature_keys
+        self.output_feature_keys = []
+        for k in ['seq', 'cam', 'u', 'v', 'w']:
+            for i in range(max_n_coords):
+                self.output_feature_keys.append(f"{k}_{i}")
+        self.output_feature_keys = FeatureKeyList(
+            label=self.output_feature_keys,
+            metainfo=["img_coords"] * len(self.output_feature_keys)
+        )
+
+        super().__init__(metadata, self.output_feature_keys, ema, raytracer, n_features, device)
+        self.assert_feat_match = False
+        self.max_n_coords = max_n_coords
+
+    def _merge_voxel_features(self, vg1_feats, vg1_mask, vg2_feats, vg2_mask):
+        """
+        Merge voxel grid features together with EMA
+        Args:
+            vg1_feats: [NxF] Tensor of raster feats from voxel grid 1. Note that this should be raster-padded w/ vg2
+                (i.e. this is after the cat+uniq op)
+            vg1_mask:  [N] Tensor which is True iff. that raster idx has a feature in vg1
+            vg2_feats: Same as vg1_feats for vg2
+            vg2_mask:  Same as vg1_mask for vg2
+        Returns:
+            feats_out: [NxF] Tensor of merged features for all unique raster indices
+        """
+        #[N x ncams x 5]
+        vg1_coords = vg1_feats.view(vg1_feats.shape[0], 5, self.max_n_coords).permute(0,2,1)
+
+        #[N x ncoords x 5]
+        vg2_coords = vg2_feats.view(vg2_feats.shape[0], 5, -1).permute(0,2,1)
+        
+        #apply ema to weights (note that placeholder weight MUST be 0)
+        vg1_coords[:, :, -1] = (vg1_coords[:, :, -1] * (1.-self.ema))
+        vg2_coords[:, :, -1] = (vg2_coords[:, :, -1] * self.ema)
+
+        #[N x (ncams+ncoords) x 5]
+        cat_coords = torch.cat([vg1_coords, vg2_coords], dim=1)
+
+        #[N x (ncams+ncoords)]
+        idxs = cat_coords[:, :, 4].argsort(dim=-1, descending=True)
+
+        idxs = idxs[:, :self.max_n_coords]
+
+        _B = torch.arange(idxs.shape[0], device=self.device).unsqueeze(-1)
+        cat_coords = cat_coords[_B, idxs] #[N x ncoords x 5]
+
+        weight_sum = cat_coords[:, :, 4].sum(dim=-1, keepdim=True)
+        cat_coords[:, :, 4] = cat_coords[:, :, 4] / weight_sum
+
+        feats_out = cat_coords.permute(0,2,1).reshape(-1, 5*self.max_n_coords)
+
+        return feats_out
 
 class VoxelGrid:
     """
@@ -206,7 +293,9 @@ class VoxelGrid:
 
         voxel_is_mindist = (valid_dists - raster_mindists[inv_idxs]).abs() < 1e-16
         if voxel_is_mindist.sum() != feature_raster_idxs.shape[0]:
-            print("uh oh not all voxels have a mindist")
+            if voxel_is_mindist.sum() < feature_raster_idxs.shape[0]:
+                print("uh oh not all voxels have a mindist")
+                import pdb;pdb.set_trace()
 
         voxel_is_mindist = voxel_is_mindist.float().unsqueeze(-1)
 

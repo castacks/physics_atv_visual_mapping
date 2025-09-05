@@ -274,7 +274,7 @@ def colorize(pixel_coordinates, valid_mask, images, bilinear_interpolation=True,
         features[~valid_mask] = 0.
 
         if reduce:
-            features = features.sum(dim=0) / (cnt + 1e-6).view(-1, 1)
+            features = features.sum(dim=0) / (cnt + 1e-16).view(-1, 1)
             return features, cnt
         else:
             return features, valid_mask

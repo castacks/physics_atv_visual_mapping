@@ -80,7 +80,9 @@ def colorize_voxel_grid(voxel_grid, feat_images, seq_img_ids, bilinear_interpola
     assert (uniq_seq_cam == seq_img_ids).all()
 
     ii = seq_cam_inv_idxs
-    if bilinear_interpolation == False:
+    if bilinear_interpolation:
+        import pdb;pdb.set_trace()
+    else:
         ui = _uv[:, 0].long()
         vi = _uv[:, 1].long()
 
@@ -88,8 +90,6 @@ def colorize_voxel_grid(voxel_grid, feat_images, seq_img_ids, bilinear_interpola
 
         vox_feats = feat_imgs[ii, vi, ui]
         weighted_vox_feats = vox_feats * _w.unsqueeze(-1)
-    else:
-        import pdb;pdb.set_trace()
 
     vox_idxs = _vox_seq_cam[:, 0]
 
@@ -128,7 +128,7 @@ if __name__ == '__main__':
     coord_colorizer_node = torch_coordinator.nodes['pointcloud_coordinate_colorizer']
 
     assert pc_colorizer_node.image_keys == coord_colorizer_node.image_keys
-    assert not pc_colorizer_node.bilinear_interpolation
+    do_bilinear_interp = pc_colorizer_node.bilinear_interpolation
     
     img_keys = pc_colorizer_node.image_keys
 
@@ -242,7 +242,7 @@ if __name__ == '__main__':
         ## re-colorize voxel grid
         torch.cuda.synchronize()
         t2 = time.time()
-        vg_recolor = colorize_voxel_grid(coord_vg, feat_images, seq_img_keys)
+        vg_recolor = colorize_voxel_grid(coord_vg, feat_images, seq_img_keys, bilinear_interpolation=do_bilinear_interp)
         torch.cuda.synchronize()
         t3 = time.time()
 

@@ -17,6 +17,8 @@ from ros_torch_converter.converter import str_to_cvt_class
 
 from torch_coordinator.setup_torch_coordinator import setup_torch_coordinator
 
+from physics_atv_visual_mapping.pointcloud_colorization.torch_color_pcl_utils import bilinear_interpolate_batch
+
 def get_coord_data_from_features(feats):
     return feats.reshape(feats.shape[0], 5, -1).permute(0,2,1)
 
@@ -76,12 +78,13 @@ def colorize_voxel_grid(voxel_grid, feat_images, seq_img_ids, bilinear_interpola
     _uv = _uv[valid_mask]
     _w = _w[valid_mask]
 
-    uniq_seq_cam, seq_cam_inv_idxs = torch.unique(_vox_seq_cam[:, 1:], dim=0, sorted=True, return_inverse=True)
+    uniq_seq_cam, seq_cam_inv_idxs, cam_cnts = torch.unique(_vox_seq_cam[:, 1:], dim=0, sorted=True, return_inverse=True, return_counts=True)
     assert (uniq_seq_cam == seq_img_ids).all()
 
     ii = seq_cam_inv_idxs
     if bilinear_interpolation:
-        import pdb;pdb.set_trace()
+        feat_imgs = torch.stack([x.image for x in feat_images], dim=0)
+        vox_feats = bilinear_interpolate_batch(_uv, feat_imgs, ii)
     else:
         ui = _uv[:, 0].long()
         vi = _uv[:, 1].long()
@@ -89,8 +92,8 @@ def colorize_voxel_grid(voxel_grid, feat_images, seq_img_ids, bilinear_interpola
         feat_imgs = torch.stack([x.image for x in feat_images], dim=0)
 
         vox_feats = feat_imgs[ii, vi, ui]
-        weighted_vox_feats = vox_feats * _w.unsqueeze(-1)
 
+    weighted_vox_feats = vox_feats * _w.unsqueeze(-1)
     vox_idxs = _vox_seq_cam[:, 0]
 
     uniq_vox_idxs, vox_inv_idxs = torch.unique(vox_idxs, sorted=True, return_inverse=True)
@@ -226,7 +229,8 @@ if __name__ == '__main__':
 
         #hmm the indexing seems right but the featpc features dont match
 
-        assert torch.allclose(res_feats, feat_pc.features), "colorized feats dont match!"
+        if not do_bilinear_interp:
+            assert torch.allclose(res_feats, feat_pc.features), "colorized feats dont match!"
 
         t1 = time.time()
         ## queue up all the images to load

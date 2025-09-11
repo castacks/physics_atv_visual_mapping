@@ -112,18 +112,26 @@ class BEVLocalMapper(LocalMapper):
         self.elevation_grid.misses += elevation_grid_new.misses
 
         ## merge features ##
-        bev_grid_new = BEVGrid.from_feature_pc(feat_pc_filtered, self.metadata, self.n_features)
+        bev_grid_new = self.bev_grid_from_fpc(feat_pc_filtered)
 
-        to_add = bev_grid_new.known & ~self.bev_feature_grid.known
-        to_merge = bev_grid_new.known & self.bev_feature_grid.known
+        self.bev_feature_grid = self.merge_bev_grids(self.bev_feature_grid, bev_grid_new)
 
-        self.bev_feature_grid.hits += bev_grid_new.hits
-        self.bev_feature_grid.misses += bev_grid_new.misses
+    def bev_grid_from_fpc(self, fpc):
+        return BEVGrid.from_feature_pc(fpc, self.metadata, self.n_features)
 
-        self.bev_feature_grid.data[to_add] = bev_grid_new.data[to_add]
-        self.bev_feature_grid.data[to_merge] = (1.0 - self.ema) * self.bev_feature_grid.data[
+    def merge_bev_grids(self, bev_grid1, bev_grid2):
+        to_add = bev_grid2.known & ~bev_grid1.known
+        to_merge = bev_grid2.known & bev_grid1.known
+
+        bev_grid1.hits += bev_grid2.hits
+        bev_grid1.misses += bev_grid2.misses
+
+        bev_grid1.data[to_add] = bev_grid2.data[to_add]
+        bev_grid1.data[to_merge] = (1.0 - self.ema) * bev_grid1.data[
             to_merge
-        ] + self.ema * bev_grid_new.data[to_merge]
+        ] + self.ema * bev_grid2.data[to_merge]
+
+        return bev_grid1
 
     def filter_pc_with_terrain_map(self, feat_pc):
         """
@@ -190,6 +198,114 @@ class BEVLocalMapper(LocalMapper):
         self.bev_grid = self.bev_grid.to(device)
         self.metadata = self.metadata.to(device)
         return self
+
+class BEVCoordinateLocalMapper(BEVLocalMapper):
+    """
+    Voxel localmapper class that maps image coordinates instead of features directly
+    This requires us to implement a slightly different merge rule (list update instead of EMA)
+    """
+    def __init__(self, metadata, feature_keys, n_features, ema, overhang, do_overhang_cleanup, max_n_coords=10, device='cpu'):
+        """
+        Args:
+            max_n_coords: the maximum amount of image feats that a voxel can pull from
+                note that with 0.5 ema, 7 coords is sufficient for >1% err
+        """
+        self.input_feature_keys = feature_keys
+        self.output_feature_keys = []
+        for k in ['seq', 'cam', 'u', 'v', 'w']:
+            for i in range(max_n_coords):
+                self.output_feature_keys.append(f"{k}_{i}")
+        self.output_feature_keys = FeatureKeyList(
+            label=self.output_feature_keys,
+            metainfo=["img_coords"] * len(self.output_feature_keys)
+        )
+
+        super().__init__(metadata, self.output_feature_keys, n_features, ema, overhang, do_overhang_cleanup, device)
+        self.assert_feat_match = False
+        self.max_n_coords = max_n_coords
+
+    def bev_grid_from_fpc(self, fpc):
+        """
+        have to handle this one differently as an instantaneous BEV cell
+            can draw from many pixels. Also note that unfortunately, the
+            coordinate mapping trick is far less effective for BEV
+        """
+        bevgrid = BEVGrid(self.metadata, self.output_feature_keys, self.device)
+
+        grid_idxs, valid_mask = bevgrid.get_grid_idxs(fpc.feature_pts)
+        raster_idxs = bevgrid.grid_indices_to_raster_indices(grid_idxs)
+        P = valid_mask.sum()
+        ncams = fpc.features.shape[-1] // 5
+
+        valid_raster_idxs = raster_idxs[valid_mask]
+        #[P x ncam x 5]
+        valid_coords = fpc.features[valid_mask].reshape(P,5,ncams).permute(0,2,1)
+
+        valid_raster_idxs, sort_idxs = valid_raster_idxs.sort()
+        valid_coords = valid_coords[sort_idxs]
+
+        uniq_raster_idxs, inv_idxs, cnts = torch.unique(valid_raster_idxs, return_inverse=True, return_counts=True, sorted=True)
+        n_cells = uniq_raster_idxs.shape[0]
+        max_pts = cnts.max()
+
+        """
+        Ok I think the final algo looks somethign like this
+            1. create an index tensor of shape [ncells x pmax]
+            2. populate each with arange and clamp to count
+            3. if inputs are sorted, we can calculate the offset to index in
+            3. then we mask
+        """
+        #this only works if the input raster idxs are sorted
+        offsets = torch.cat([torch.zeros(1, dtype=torch.long, device=self.device), cnts[:-1].cumsum(dim=0)])
+        buf_idxs = torch.arange(max_pts, device=self.device).view(1,-1).tile(n_cells, 1)
+        mask = (buf_idxs < cnts.view(-1, 1))
+        buf_idxs += offsets.view(-1, 1)
+        buf_idxs[~mask] = -1
+        
+        coord_data = valid_coords[buf_idxs]
+        coord_data[~mask] = 0.
+
+        coord_data = coord_data.reshape(n_cells, max_pts*ncams, 5)
+
+        weights = coord_data[:, :, -1]
+        #add jitter to encourage random sampling of pts in a cell
+        sort_idxs = torch.argsort(weights + 1e-4*torch.rand_like(weights), dim=-1, descending=True)
+        sort_idxs = sort_idxs[:, :self.max_n_coords]
+        ibs = torch.arange(n_cells, device=self.device).view(-1, 1).tile(1, self.max_n_coords)
+        coord_data = coord_data[ibs, sort_idxs]
+
+        coord_data[:, :, -1] /= coord_data[:, :, -1].sum(dim=-1, keepdims=True)
+
+        coord_data = coord_data.permute(0,2,1).reshape(n_cells, -1)
+
+        grid_idxs = bevgrid.raster_indices_to_grid_indices(uniq_raster_idxs)
+        bevgrid.data[grid_idxs[:, 0], grid_idxs[:, 1]] = coord_data
+        bevgrid.hits[grid_idxs[:, 0], grid_idxs[:, 1]] = cnts
+
+        return bevgrid
+        
+    def merge_bev_grids(self, bev_grid1, bev_grid2):
+        nx, ny = bev_grid1.metadata.N
+
+        bev_grid1.hits += bev_grid2.hits
+        bev_grid1.misses += bev_grid2.misses
+
+        bg1_coord_data = bev_grid1.data.view(nx, ny, 5, self.max_n_coords).permute(0,1,3,2)
+        bg2_coord_data = bev_grid2.data.view(nx, ny, 5, self.max_n_coords).permute(0,1,3,2)
+
+        bg1_coord_data[:, :, :, -1] *= (1.0 - self.ema)
+        bg2_coord_data[:, :, :, -1] *= self.ema
+
+        all_coord_data = torch.cat([bg1_coord_data, bg2_coord_data], dim=2)
+        sort_idxs = all_coord_data[:, :, :, -1].argsort(dim=2, descending=True)[:, :, :self.max_n_coords]
+        ixs, iys = torch.meshgrid(torch.arange(nx, device=self.device), torch.arange(ny, device=self.device), indexing='ij')
+        ixs = ixs.unsqueeze(-1).tile(1,1,sort_idxs.shape[-1])
+        iys = iys.unsqueeze(-1).tile(1,1,sort_idxs.shape[-1])
+        all_coord_data = all_coord_data[ixs, iys, sort_idxs]
+
+        bev_grid1.data = all_coord_data.permute(0,1,3,2).reshape(nx, ny, 5*self.max_n_coords)
+
+        return bev_grid1
 
 class BEVGrid:
     """

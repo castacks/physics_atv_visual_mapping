@@ -188,6 +188,8 @@ if __name__ == '__main__':
         coord_vg = torch_coordinator.data['coord_voxel_map']
         coord_pc = torch_coordinator.data['coord_pointcloud_in_odom']
 
+        import pdb;pdb.set_trace()
+
         ## check that points/voxels are spatially identical
         assert torch.allclose(feat_pc.pts, coord_pc.pts), "featpc.pts != coordpc.pts"
         assert torch.all(feat_pc.feat_mask == coord_pc.feat_mask), "featpc.mask != coordpc.mask"
@@ -212,25 +214,6 @@ if __name__ == '__main__':
         res_feats = torch.stack(res_feats, dim=0).sum(dim=0)
 
         error = torch.linalg.norm(res_feats - feat_pc.features, dim=-1)
-
-        # plt.imshow(curr_feat_imgs[0].cpu().numpy())
-        # plt.scatter(_uv[:, 0, 0].cpu().numpy(), _uv[:, 0, 1].cpu().numpy())
-        # plt.show()
-
-        # pc1 = o3d.geometry.PointCloud()
-        # pc1.points = o3d.utility.Vector3dVector(feat_pc.feature_pts.cpu().numpy())
-        # pc1.colors = o3d.utility.Vector3dVector(feat_pc.features.cpu().numpy())
-        # o3d.visualization.draw_geometries([pc1])
-
-        # pc2 = o3d.geometry.PointCloud()
-        # pc2.points = o3d.utility.Vector3dVector(coord_pc.feature_pts.cpu().numpy())
-        # pc2.colors = o3d.utility.Vector3dVector(res_feats.cpu().numpy())
-        # o3d.visualization.draw_geometries([pc2])
-
-        #hmm the indexing seems right but the featpc features dont match
-
-        if not do_bilinear_interp:
-            assert torch.allclose(res_feats, feat_pc.features), "colorized feats dont match!"
 
         t1 = time.time()
         ## queue up all the images to load

@@ -18,18 +18,17 @@ from ros_torch_converter.converter import str_to_cvt_class
 from torch_coordinator.setup_torch_coordinator import setup_torch_coordinator
 
 from physics_atv_visual_mapping.pointcloud_colorization.torch_color_pcl_utils import bilinear_interpolate_batch
+from physics_atv_visual_mapping.utils import normalize_dino
 
 def get_coord_data_from_features(feats):
     return feats.reshape(feats.shape[0], 5, -1).permute(0,2,1)
 
-def get_images(img_keys, coord_vg, max_images=-1):
+def get_unique_seq_cam(coord_data):
     """
-    Find all the images to load from the coord vg
+    Find all the images to load from coord_data
     """
-    ncams = len(img_keys)
-    coord_data = get_coord_data_from_features(coord_vg.voxel_grid.features)
     valid_mask = coord_data[:, :, -1] > 1e-8
-    seq_cam_ids = coord_data[valid_mask][:, :2].long()
+    seq_cam_ids = coord_data[valid_mask][:, :2].round().long()
     ws = coord_data[valid_mask][:, -1]
     seq_cam_ids, inv_idxs = seq_cam_ids.unique(dim=0, return_inverse=True, sorted=True)
 
@@ -40,78 +39,165 @@ def get_images(img_keys, coord_vg, max_images=-1):
     )
     weight_contribution /= weight_contribution.sum()
 
-    if max_images > 0:
-        import pdb;pdb.set_trace()
-        mask = torch.zeros_like(weight_contribution).bool()
-        sort_idxs = weight_contribution.argsort(descending=True)
-        mask[sort_idxs[:max_images]] = True
+    return seq_cam_ids, inv_idxs, weight_contribution
 
-        seq_cam_ids = seq_cam_ids[mask]
-        weight_contribution = weight_contribution[mask]
-
-    return seq_cam_ids, weight_contribution
-
-def colorize_voxel_grid(voxel_grid, feat_images, seq_img_ids, bilinear_interpolation=False):
+def get_recolor_feats(cam_idxs, uvw, feat_images, do_bilinear_interp=False):
     """
     Args:
-        voxel_grid: VoxelGridTorch containing coordinate info
-        feat_images: The list of K feature images to colorize with
-        seq_img_idxs: sorted Kx2 tensor containing the [seq_id, cam_id] of each image
+        cam_idxs: [PxN] Tensor telling which image to index into (inv_idxs output of get_unique_seq_cam in 99% of cases)
+        uvw: [PxNx3] Tensor of image coord data (last 3 channels of coord_data in 99% of cases)
+        feat_images: [KxWxHxC] Tensor of images to recolor with
+    Returns:
+        [PxC] Tensor of recolorized features
     """
-    coord_data = get_coord_data_from_features(voxel_grid.voxel_grid.features)
-    nvox, ncams, _ = coord_data.shape
-    raster_idxs = voxel_grid.voxel_grid.feature_raster_indices
-
-    assert (raster_idxs == raster_idxs.sort()[0]).all(), "need voxel raster idxs to be sorted"
-
-    _vox_seq_cam = torch.cat([
-        raster_idxs.view(nvox,1,1).tile(1,ncams,1),
-        coord_data[:, :, :2],
-    ], dim=-1).long()
-
-    _uv = coord_data[:, :, 2:4]
-    _w = coord_data[:, :, 4]
+    _uv = uvw[:, :, :2]
+    _w = uvw[:, :, -1]
 
     #filter out empty voxel feats
-    valid_mask = coord_data[:, :, -1] > 1e-8
-    _vox_seq_cam = _vox_seq_cam[valid_mask]
+    valid_mask = _w > 1e-8
     _uv = _uv[valid_mask]
     _w = _w[valid_mask]
 
-    uniq_seq_cam, seq_cam_inv_idxs, cam_cnts = torch.unique(_vox_seq_cam[:, 1:], dim=0, sorted=True, return_inverse=True, return_counts=True)
-    assert (uniq_seq_cam == seq_img_ids).all()
+    scatter_idxs = torch.argwhere(valid_mask)[:, 0]
 
-    ii = seq_cam_inv_idxs
-    if bilinear_interpolation:
-        feat_imgs = torch.stack([x.image for x in feat_images], dim=0)
-        vox_feats = bilinear_interpolate_batch(_uv, feat_imgs, ii)
+    if do_bilinear_interp:
+        feats = bilinear_interpolate_batch(_uv, feat_images, cam_idxs)
     else:
         ui = _uv[:, 0].long()
         vi = _uv[:, 1].long()
 
-        feat_imgs = torch.stack([x.image for x in feat_images], dim=0)
+        feats = feat_images[cam_idxs, vi, ui]
 
-        vox_feats = feat_imgs[ii, vi, ui]
-
-    weighted_vox_feats = vox_feats * _w.unsqueeze(-1)
-    vox_idxs = _vox_seq_cam[:, 0]
-
-    uniq_vox_idxs, vox_inv_idxs = torch.unique(vox_idxs, sorted=True, return_inverse=True)
-    assert (uniq_vox_idxs == raster_idxs).all()
-
-    new_feats = torch_scatter.scatter(
-        src=weighted_vox_feats,
-        index=vox_inv_idxs,
+    weighted_feats = feats * _w.unsqueeze(-1)
+    agg_feats = torch_scatter.scatter(
+        src=weighted_feats,
+        index=scatter_idxs,
         reduce='sum',
         dim=0
     )
 
-    vg_out = copy.deepcopy(voxel_grid)
-    vg_out.voxel_grid.feature_keys = copy.deepcopy(feat_images[0].feature_keys)
-    vg_out.voxel_grid.features = new_feats
-    vg_out.voxel_grid.n_features = new_feats.shape[-1]
+    return agg_feats
 
-    return vg_out
+def recolor_voxel_grid(coord_vg, img_dirs, do_bilinear_interp=True):
+    """
+    Re-colorize a voxel grid
+    Args:
+        coord_vg: Coordinate VoxelGrid, with feature keys of the form:
+            [seq_idxN, cam_idxN, uxN, vxN, wxN]
+        img_dirs: list of dirs to find kitti images from (ordering should match the cam_ids in the vg)
+    """
+    nvox = coord_vg.voxel_grid.features.shape[0]
+    coord_data = coord_vg.voxel_grid.features.view(nvox, 5, -1).permute(0,2,1)
+    ncams = coord_data[:, :, 1].max().round().long().item() + 1
+    assert ncams == len(img_dirs), "number of image dirs != max cam id in vg!"
+
+    ## step 1: get all the images that the voxel grid attends to
+    torch.cuda.synchronize()
+    t1 = time.time()
+    uniq_seq_cam, inv_idxs, weight_contrib = get_unique_seq_cam(coord_data)
+    uvw = coord_data[:,:, 2:]
+
+    ## step 2: load all images
+    torch.cuda.synchronize()
+    t2 = time.time()
+    res_imgs = [None] * uniq_seq_cam.shape[0]
+    fks = None
+
+    for i, (sid, cid) in enumerate(uniq_seq_cam):
+        fp = img_dirs[cid.item()]
+        img = FeatureImageTorch.from_kitti(fp, sid, device=coord_vg.device)
+        res_imgs[i] = img.image
+        fks = img.feature_keys
+
+    feat_imgs = torch.stack(res_imgs, dim=0)
+
+    ## step 3: recolor
+    torch.cuda.synchronize()
+    t3 = time.time()
+    recolor_feats = get_recolor_feats(inv_idxs, uvw, feat_imgs, do_bilinear_interp=do_bilinear_interp)
+
+    vg_out = copy.deepcopy(coord_vg)
+    vg_out.voxel_grid.feature_keys = copy.deepcopy(fks)
+    vg_out.voxel_grid.features = recolor_feats
+    vg_out.voxel_grid.n_features = recolor_feats.shape[-1]
+
+    torch.cuda.synchronize()
+    t4 = time.time()
+
+    timing_stats = {
+        'img_check': t2-t1,
+        'img_load': t3-t2,
+        'recolor': t4-t3
+    }
+
+    return vg_out, weight_contrib, timing_stats
+
+def recolor_bev_grid(coord_bev, img_dirs, do_bilinear_interp=True):
+    """
+    Re-colorize a voxel grid
+    Args:
+        coord_vg: Coordinate BEVGrid, with feature keys of the form:
+            [seq_idxN, cam_idxN, uxN, vxN, wxN]
+        img_dirs: list of dirs to find kitti images from (ordering should match the cam_ids in the vg)
+    """
+    nx, ny = coord_bev.bev_grid.metadata.N
+    coord_fidxs = [i for i,k in enumerate(coord_bev.bev_grid.feature_keys.metainfo) if k=='img_coords']
+    noncoord_fidxs = [i for i,k in enumerate(coord_bev.bev_grid.feature_keys.metainfo) if k!='img_coords']
+    coord_data_2d = coord_bev.bev_grid.data[:, :, coord_fidxs].reshape(nx, ny, 5, -1).permute(0,1,3,2)
+
+    has_feats_mask = coord_data_2d[:, :, :, -1].max(dim=-1)[0] > 1e-4
+    ncells = has_feats_mask.sum()
+
+    coord_data = coord_data_2d[has_feats_mask]
+    ncams = coord_data[:, :, 1].max().round().long().item() + 1
+
+    assert ncams == len(img_dirs), "number of image dirs != max cam id in vg!"
+
+    ## step 1: get all the images that the voxel grid attends to
+    torch.cuda.synchronize()
+    t1 = time.time()
+    uniq_seq_cam, inv_idxs, weight_contrib = get_unique_seq_cam(coord_data)
+    uvw = coord_data[:,:, 2:]
+
+    ## step 2: load all images
+    torch.cuda.synchronize()
+    t2 = time.time()
+    res_imgs = [None] * uniq_seq_cam.shape[0]
+    fks = None
+
+    for i, (sid, cid) in enumerate(uniq_seq_cam):
+        fp = img_dirs[cid.item()]
+        img = FeatureImageTorch.from_kitti(fp, sid, device=coord_vg.device)
+        res_imgs[i] = img.image
+        fks = img.feature_keys
+
+    feat_imgs = torch.stack(res_imgs, dim=0)
+
+    ## step 3: recolor
+    torch.cuda.synchronize()
+    t3 = time.time()
+    recolor_feats = get_recolor_feats(inv_idxs, uvw, feat_imgs, do_bilinear_interp=do_bilinear_interp)
+
+    recolor_feats_2d = torch.zeros(nx, ny, len(fks), device=coord_bev.device)
+    recolor_feats_2d[has_feats_mask] = recolor_feats
+
+    out_keys = coord_bev.bev_grid.feature_keys[noncoord_fidxs] + fks
+
+    bev_out = copy.deepcopy(coord_bev)
+    bev_out.bev_grid.feature_keys = out_keys
+    bev_out.bev_grid.n_features = len(out_keys)
+    bev_out.bev_grid.data = torch.cat([bev_out.bev_grid.data[:, :, noncoord_fidxs], recolor_feats_2d], dim=-1)
+
+    torch.cuda.synchronize()
+    t4 = time.time()
+
+    timing_stats = {
+        'img_check': t2-t1,
+        'img_load': t3-t2,
+        'recolor': t4-t3
+    }
+
+    return bev_out, weight_contrib, timing_stats
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -183,18 +269,20 @@ if __name__ == '__main__':
         #####################
         feat_vg = torch_coordinator.data['voxel_map']
         feat_pc = torch_coordinator.data['feature_pointcloud_in_odom']
-        curr_feat_imgs = torch.stack([torch_coordinator.data[k].image for k in img_keys], dim=0)
+        feat_bev = torch_coordinator.data['bev_map']
 
         coord_vg = torch_coordinator.data['coord_voxel_map']
         coord_pc = torch_coordinator.data['coord_pointcloud_in_odom']
+        coord_bev = torch_coordinator.data['coord_bev_map']
 
-        import pdb;pdb.set_trace()
+        curr_feat_imgs = torch.stack([torch_coordinator.data[k].image for k in img_keys], dim=0)
 
         ## check that points/voxels are spatially identical
         assert torch.allclose(feat_pc.pts, coord_pc.pts), "featpc.pts != coordpc.pts"
         assert torch.all(feat_pc.feat_mask == coord_pc.feat_mask), "featpc.mask != coordpc.mask"
         assert torch.all(feat_vg.voxel_grid.raster_indices == coord_vg.voxel_grid.raster_indices), "feat_vg.idxs != coord_vg.idxs"
         assert torch.all(feat_vg.voxel_grid.feature_mask == coord_vg.voxel_grid.feature_mask), "feat_vg.mask != coord_vg.mask"
+        assert torch.all(feat_bev.bev_grid.hits == coord_bev.bev_grid.hits), "feat_bev.hits != coord_bev.hits"
 
         ## check that indexing into the instantaneous feat images with the coord pc matches the featpc
         coord_pc_coords = get_coord_data_from_features(coord_pc.features)
@@ -215,23 +303,14 @@ if __name__ == '__main__':
 
         error = torch.linalg.norm(res_feats - feat_pc.features, dim=-1)
 
-        t1 = time.time()
-        ## queue up all the images to load
-        seq_img_keys, weight_contrib = get_images(img_keys, coord_vg)
-       
-        ## get features
-        feat_images = []
-        for ik in seq_img_keys:
-            img = FeatureImageTorch.from_kitti(os.path.join(args.run_dir, img_keys[ik[1]]), ik[0], device='cuda')
-            # img = ImageTorch.from_kitti(os.path.join(args.run_dir, img_keys[ik[1]]), ik[0], device='cuda')
-            feat_images.append(img)
+        img_dirs = [os.path.join(args.run_dir, k) for k in img_keys]
 
-        ## re-colorize voxel grid
-        torch.cuda.synchronize()
-        t2 = time.time()
-        vg_recolor = colorize_voxel_grid(coord_vg, feat_images, seq_img_keys, bilinear_interpolation=do_bilinear_interp)
-        torch.cuda.synchronize()
-        t3 = time.time()
+        ###################
+        ## Voxel Recolor ##
+        ###################
+
+        vg_recolor, weight_contrib, vg_recolor_timing = recolor_voxel_grid(coord_vg, img_dirs, do_bilinear_interp=do_bilinear_interp)
+        voxel_timing_str = " ".join([f"{k}:{v:.4f}s" for k,v in vg_recolor_timing.items()])
 
         ## compare
         feat_vg_o3d = feat_vg.voxel_grid.visualize()
@@ -247,7 +326,7 @@ if __name__ == '__main__':
         cdf = np.cumsum(weight_contrib.cpu().numpy()[::-1]) 
 
         fig, axs = plt.subplots(1, 2)
-        fig.suptitle(f'Recolor metrics ({len(feat_images)} images)')
+        fig.suptitle(f'Voxel Recolor metrics')
 
         axs[0].plot(cdf)
         axs[0].set_title('CDF of image contribution')
@@ -262,4 +341,48 @@ if __name__ == '__main__':
         plt.show()
 
         o3d.visualization.draw_geometries([feat_vg_o3d], window_name="Original Voxel Grid")
-        o3d.visualization.draw_geometries([vg_recolor_o3d], window_name=f"Recolor Voxel Grid (img load: {t2-t1:.4f}s, recolor {t3-t2:.4f}s)")
+        o3d.visualization.draw_geometries([vg_recolor_o3d], window_name=f"Recolor Voxel Grid {voxel_timing_str}")
+
+        #################
+        ## BEV Recolor ##
+        #################
+
+        bev_recolor, weight_contrib, bev_recolor_timing = recolor_bev_grid(coord_bev, img_dirs, do_bilinear_interp=do_bilinear_interp)
+
+        assert torch.all(bev_recolor.bev_grid.hits == feat_bev.bev_grid.hits)
+        recolor_fidxs = [i for i,k in enumerate(bev_recolor.bev_grid.feature_keys.metainfo) if k == 'vfm']
+        feat_fidxs = [i for i,k in enumerate(feat_bev.bev_grid.feature_keys.metainfo) if k == 'vfm']
+        valid_mask = feat_bev.bev_grid.hits > 0.5
+
+        orig_feats = feat_bev.bev_grid.data[:, :, feat_fidxs]
+        recolor_feats = bev_recolor.bev_grid.data[:, :, recolor_fidxs]
+
+        orig_viz = normalize_dino(orig_feats[:, :, :3])
+        recolor_viz = normalize_dino(recolor_feats[:, :, :3])
+
+        ## metrics ##
+        err = torch.linalg.norm(orig_feats - recolor_feats, dim=-1)
+        cdf = np.cumsum(weight_contrib.cpu().numpy()[::-1]) 
+
+        fig, axs = plt.subplots(2, 3)
+        fig.suptitle(f'BEV Recolor metrics')
+
+        axs[0, 0].plot(cdf)
+        axs[0, 0].set_title('CDF of image contribution')
+        axs[0, 0].set_xlabel('Num images')
+        axs[0, 0].set_ylabel('Frac of features')
+
+        axs[0, 1].hist(err[valid_mask].cpu().numpy(), bins=100)
+        axs[0, 1].set_title('Voxel error dist  (if itr==0, there should be no error)')
+        axs[0, 1].set_xlabel('L2 error')
+        axs[0, 1].set_ylabel('density')
+
+        axs[1, 0].imshow(orig_viz.cpu())
+        axs[1, 0].set_title('orig feats')
+
+        axs[1, 1].imshow(recolor_viz.cpu())
+        axs[1, 1].set_title('recolor feats')
+
+        axs[1, 2].imshow(err.cpu(), cmap='jet')
+        axs[1, 2].set_title('error')
+        plt.show()

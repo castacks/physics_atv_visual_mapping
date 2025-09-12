@@ -302,6 +302,8 @@ class BEVCoordinateLocalMapper(BEVLocalMapper):
         ixs = ixs.unsqueeze(-1).tile(1,1,sort_idxs.shape[-1])
         iys = iys.unsqueeze(-1).tile(1,1,sort_idxs.shape[-1])
         all_coord_data = all_coord_data[ixs, iys, sort_idxs]
+        weight_sum = all_coord_data[:, :, :, -1].sum(dim=-1, keepdims=True).clamp(1e-8, 1.)
+        all_coord_data[:, :, :, -1] /= weight_sum
 
         bev_grid1.data = all_coord_data.permute(0,1,3,2).reshape(nx, ny, 5*self.max_n_coords)
 

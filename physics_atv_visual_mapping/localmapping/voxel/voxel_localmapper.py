@@ -122,6 +122,15 @@ class VoxelLocalMapper(LocalMapper):
 
         # print('culling {} voxels...'.format(cull_mask.sum()))
 
+        new_grid_idxs = self.voxel_grid.raster_indices_to_grid_indices(self.voxel_grid.raster_indices)
+        new_grid_idxs_bev = new_grid_idxs[:, :2]
+        new_grid_idxs_z = new_grid_idxs[:, 2]
+        new_grid_idxs_bev_raster = new_grid_idxs[:, 0] * self.voxel_grid.metadata.N[1] + new_grid_idxs[:, 1]
+        new_minz = torch_scatter.scatter(new_grid_idxs_z, index=new_grid_idxs_bev_raster, reduce="min")
+        bottom_voxel_mask = new_grid_idxs_z <= new_minz[new_grid_idxs_bev_raster]
+
+        cull_mask = cull_mask & ~bottom_voxel_mask
+
         if debug:
             import open3d as o3d
             pts = self.voxel_grid.grid_indices_to_pts(self.voxel_grid.raster_indices_to_grid_indices(self.voxel_grid.raster_indices))

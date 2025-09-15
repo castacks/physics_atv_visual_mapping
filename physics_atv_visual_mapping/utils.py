@@ -18,6 +18,13 @@ def normalize_dino(img, return_min_max=False):
     _img = img[..., :3]
     _ndims = len(img.shape) - 1
     _dims = [1] * _ndims + [3]
+
+    if _img.shape[0] <= 1:
+        if return_min_max:
+            return torch.zeros_like(_img), (torch.zeros(3), torch.ones(3))
+        else:
+            return torch.zeros_like(_img)
+
     vmin = _img.reshape(-1, 3).min(dim=0)[0].view(*_dims)
     vmax = _img.reshape(-1, 3).max(dim=0)[0].view(*_dims)
     if return_min_max:

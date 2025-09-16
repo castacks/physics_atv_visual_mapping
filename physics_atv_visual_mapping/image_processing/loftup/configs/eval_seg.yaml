@@ -1,0 +1,35 @@
+# Environment Args
+output_root: 'output_dir' # '../output_root'
+pytorch_data_dir: 'datasets' # '/mnt/haiwen/datasets'
+
+# Dataset args
+dataset: "cocostuff"
+
+# Model Args
+model_type: "dinov2"
+activation_type: "token"
+
+# Upsampling args
+upsampler_type: "loftup"
+upsampler_path: ""
+
+# Training args
+batch_size: 8
+epochs: 10
+num_workers: 2
+lr: 1e-4
+load_size: 224 ## Input image size (to extract LR feats)
+guidance_res: 224 ## Guidance image size (to extract HR feats) -- same as HR feat size
+image_train: True
+num_gpus: 1
+train_small_res: True
+loading_imgs: True
+
+# No need to change
+hydra:
+  run:
+    dir: "."
+  output_subdir: ~
+
+use_pretrained_classifier: False
+visualize: False

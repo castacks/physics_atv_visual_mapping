@@ -1,7 +1,6 @@
 import os
 import torch
 import torchvision
-import rospkg
 
 import math
 import torch.nn.functional as F
@@ -20,7 +19,6 @@ class LoftUpBlock(ImageProcessingBlock):
     Image processing block that runs clipseg on the image
     """
     def __init__(self, image_insize, device, models_dir):
-        rp = rospkg.RosPack()
         self.device = device
         self.input_size = image_insize
 
@@ -31,7 +29,7 @@ class LoftUpBlock(ImageProcessingBlock):
         loftup_dir = os.path.join(models_dir, "torch_hub", "andrehuang_loftup_main")
 
         self.loftup_type = torch_hub_name
-
+        torch.hub.set_dir(os.path.join(models_dir, "torch_hub"))
         model, patch_size, dim = get_featurizer(featurizer_class, dino_dir)
         self.model = model.to('cuda')
         # kernel_size = patch_size

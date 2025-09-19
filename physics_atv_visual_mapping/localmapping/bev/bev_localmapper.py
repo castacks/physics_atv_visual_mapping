@@ -545,6 +545,7 @@ class BEVGrid:
 
     def to(self, device):
         self.device = device
+        self.metadata = self.metadata.to(device)
         self.data = self.data.to(device)
         self.hits = self.hits.to(device)
         self.misses = self.misses.to(device)

@@ -63,12 +63,10 @@ localmapping:
     ema: 0.5 #higher->use recent more
     n_features: 8  # Match VLAD n_clusters
     metadata:
-        origin: [-60., -60., -30.]
-        length: [120., 120., 60.]
-        resolution: [0.4, 0.4, 0.4]
-        # origin: [-30., -30., -15.]
-        # length: [60., 60., 30.]
-        # resolution: [0.2, 0.2, 0.2]
+        # Compact 20x20m map for faster processing
+        origin: [-10., -10., -5.]
+        length: [20., 20., 10.]
+        resolution: [0.4, 0.4, 0.4]  # Keep same resolution
 
 terrain_estimation:
     -

@@ -39,7 +39,7 @@ image_processing:
     #         dino_layer: 10
     #         image_insize: [686, 364] #this should be the size of the input images
     #         desc_facet: value
-    # - 
+    # -
     #     type: pca
     #     args:
     #         fp: physics_atv_visual_mapping/pca/pca_vitb10_value.pt
@@ -48,20 +48,20 @@ image_processing:
         type: radio
         args:
             radio_type: radio_v2.5-b # radio_v2 e-radio_v2
-            image_insize: [672, 352]  # Original Image Size must be divisible by 16
+            image_insize: [352, 352]  # Match simroad VLAD training size
 
-    - 
-        type: pca
+    -
+        type: vlad
         args:
-            fp: physics_atv_visual_mapping/pca/radio_v2.5-b_64_renegade_ridge.pt
-            # fp: physics_atv_visual_mapping/pca/radio_v2.5b_64_gascola_20250124.pt
+            n_clusters: 8
+            cache_dir: /home/tartandriver/tartandriver_ws/src/planning/vlm_planner/datasets/simroad/vlad_cache
 
 # voxel
 localmapping:
     mapper_type: voxel
     layer_key: dino
     ema: 0.5 #higher->use recent more
-    n_features: 16
+    n_features: 8  # Match VLAD n_clusters
     metadata:
         origin: [-60., -60., -30.]
         length: [120., 120., 60.]

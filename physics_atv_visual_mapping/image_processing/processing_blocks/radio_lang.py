@@ -216,7 +216,8 @@ class RadioLangBlock(ImageProcessingBlock):
     @property
     def output_feature_keys(self):
         # self.radio.n_output_channels
+        nfeats = self.adaptor.head_mlp.final[-1].out_features
         return FeatureKeyList(
-            label=[f"{self.radio_type}_{self.adaptor_type}_{i}" for i in range(self.radio.embed_dim)],
-            metainfo=["vfm" for i in range(self.radio.embed_dim)]
+            label=[f"{self.radio_type}_{self.adaptor_type}_{i}" for i in range(nfeats)],
+            metainfo=["vfm" for i in range(nfeats)]
         )

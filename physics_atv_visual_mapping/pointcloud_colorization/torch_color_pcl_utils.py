@@ -231,32 +231,7 @@ def colorize(pixel_coordinates, valid_mask, images, bilinear_interpolation=True,
     coords[~valid_mask] = 0
 
     if bilinear_interpolation:
-        rem = torch.frac(coords)
-        offset = torch.tensor([
-            [0, 0],
-            [1, 0],
-            [0, 1],
-            [1, 1]
-        ], device=images.device).view(4, 1, 1, 2)
-
-        #[4 x B x N x 2]
-        idxs = torch.tile(coords.view(1, ni, -1, 2), (4, 1, 1, 1)) + offset
-        #equivalent to same-padding
-        ixs = idxs[..., 1].long().clip(0, ih-1)
-        iys = idxs[..., 0].long().clip(0, iw-1)
-
-        weights = torch.stack([
-            (1.-rem[..., 0]) * (1.-rem[..., 1]),
-            rem[..., 0] * (1.-rem[..., 1]),
-            (1. - rem[..., 0]) * rem[..., 1],
-            rem[..., 0] * rem[..., 1]
-        ], dim=0)
-
-        ibs = torch.arange(ni).view(1, ni, 1).tile(4, 1, ixs.shape[-1])
-
-        features = images[ibs, ixs, iys]
-        interp_features = (weights.view(4, ni, -1, 1) * features).sum(dim=0)
-
+        interp_features = bilinear_interpolate(coords, images)
         interp_features[~valid_mask] = 0.
 
         if reduce:
@@ -274,40 +249,86 @@ def colorize(pixel_coordinates, valid_mask, images, bilinear_interpolation=True,
         features[~valid_mask] = 0.
 
         if reduce:
-            features = features.sum(dim=0) / (cnt + 1e-6).view(-1, 1)
+            features = features.sum(dim=0) / (cnt + 1e-16).view(-1, 1)
             return features, cnt
         else:
             return features, valid_mask
 
-def bilinear_interpolation(pixel_coordinates, image):
+def bilinear_interpolate(coords, images):
     """
     Perform bilinear interpolation at pixel coordinates in image
     Args:
-        pixel_coordinates: [N x 2] FloatTensor of pixel coordinates
-        image: [W x H x C] FloatTensor of image data
+        pixel_coordinates: [B x N x 2] FloatTensor of pixel coordinates
+        image: [B x W x H x C] FloatTensor of image data
+    Returns:
+        interp_features: [B x N x F] Tensor of interpolated features
     """
-    rem = torch.frac(pixel_coordinates) #ok to just do this bc no negative idxs
+    ni, ih, iw, ic = images.shape
+    rem = torch.frac(coords)
     offset = torch.tensor([
         [0, 0],
         [1, 0],
         [0, 1],
         [1, 1]
-    ], device=image.device).view(4, 1, 2)
+    ], device=images.device).view(4, 1, 1, 2)
 
-    idxs = torch.tile(pixel_coordinates.view(1, -1, 2), (4, 1, 1)).long() + offset
-
+    #[4 x B x N x 2]
+    idxs = torch.tile(coords.view(1, ni, -1, 2), (4, 1, 1, 1)) + offset
     #equivalent to same-padding
-    idxs[..., 0] = idxs[..., 0].clip(0, image.shape[0]-1)
-    idxs[..., 1] = idxs[..., 1].clip(0, image.shape[1]-1)
+    ixs = idxs[..., 1].long().clip(0, ih-1)
+    iys = idxs[..., 0].long().clip(0, iw-1)
 
     weights = torch.stack([
-        (1.-rem[:, 0]) * (1.-rem[:, 1]),
-        rem[:, 0] * (1.-rem[:, 1]),
-        (1. - rem[:, 0]) * rem[:, 1],
-        rem[:, 0] * rem[:, 1]
+        (1.-rem[..., 0]) * (1.-rem[..., 1]),
+        rem[..., 0] * (1.-rem[..., 1]),
+        (1. - rem[..., 0]) * rem[..., 1],
+        rem[..., 0] * rem[..., 1]
     ], dim=0)
 
-    feats = image[idxs[..., 0], idxs[..., 1]]
+    ibs = torch.arange(ni).view(1, ni, 1).tile(4, 1, ixs.shape[-1])
 
-    interp_feats = (weights.view(4, -1, 1) * feats).sum(dim=0)
-    return interp_feats
+    features = images[ibs, ixs, iys]
+    interp_features = (weights.view(4, ni, -1, 1) * features).sum(dim=0)
+
+    return interp_features
+
+def bilinear_interpolate_batch(coords, images, batch_idxs):
+    """
+    Perform bilinear interpolation at pixel coordinates in image
+
+    Args:
+        pixel_coordinates: [B x N x 2] FloatTensor of pixel coordinates
+        image: [B x W x H x C] FloatTensor of image data
+        batch_idxs: [N] LongTensor specifying which image each coord corresponds to
+
+    Returns:
+        interp_features: [N x F] Tensor of interpolated features
+    """
+    ni, ih, iw, ic = images.shape
+    rem = torch.frac(coords)
+    offset = torch.tensor([
+        [0, 0],
+        [1, 0],
+        [0, 1],
+        [1, 1]
+    ], device=images.device).view(4, 1, 2)
+
+    #[4 x N x 2]
+    idxs = torch.tile(coords.view(1, -1, 2), (4, 1, 1)) + offset
+    #equivalent to same-padding
+    ixs = idxs[..., 1].long().clip(0, ih-1)
+    iys = idxs[..., 0].long().clip(0, iw-1)
+
+    weights = torch.stack([
+        (1.-rem[..., 0]) * (1.-rem[..., 1]),
+        rem[..., 0] * (1.-rem[..., 1]),
+        (1. - rem[..., 0]) * rem[..., 1],
+        rem[..., 0] * rem[..., 1]
+    ], dim=0)
+
+    ibs = batch_idxs.view(1, -1).tile(4, 1)
+
+    features = images[ibs, ixs, iys]
+    interp_features = (weights.view(4, -1, 1) * features).sum(dim=0)
+
+    return interp_features

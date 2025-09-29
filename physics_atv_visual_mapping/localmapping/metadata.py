@@ -1,5 +1,7 @@
 import torch
 
+import numpy as np
+import open3d as o3d
 
 class LocalMapperMetadata:
     """n-dimensional definition of local mapper metadata"""
@@ -36,6 +38,56 @@ class LocalMapperMetadata:
             length=length,
             resolution=resolution
         ).to(device)
+    
+    def intersects(self, metadata2):
+        """
+        Compute whether two metadata objects have overlap
+        """
+        _min1 = self.origin
+        _max1 = self.origin + self.length
+
+        _min2 = metadata2.origin
+        _max2 = metadata2.origin + metadata2.length
+
+        sep = (_min1 > _max2).any() or (_min2 > _max1).any()
+
+        return not sep
+
+    def visualize(self):
+        xmin, ymin, zmin = self.origin.tolist()
+        xmax, ymax, zmax = (self.origin + self.length).tolist()
+
+        pts = np.array([
+            [xmin, ymin, zmin],
+            [xmin, ymin, zmax],
+            [xmin, ymax, zmax],
+            [xmin, ymax, zmin],
+            [xmax, ymin, zmin],
+            [xmax, ymin, zmax],
+            [xmax, ymax, zmax],
+            [xmax, ymax, zmin],
+        ])
+
+        adj = np.array([
+            [0, 1],
+            [1, 2],
+            [2, 3],
+            [3, 0],
+            [0, 4],
+            [1, 5],
+            [2, 6],
+            [3, 7],
+            [4, 5],
+            [5, 6],
+            [6, 7],
+            [7, 4],
+        ])
+
+        out = o3d.geometry.LineSet()
+        out.points = o3d.utility.Vector3dVector(pts)
+        out.lines = o3d.utility.Vector2iVector(adj)
+
+        return out
 
     def __eq__(self, other):
         if self.ndims != other.ndims:

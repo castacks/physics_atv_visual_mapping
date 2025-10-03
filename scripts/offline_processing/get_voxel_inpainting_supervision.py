@@ -21,7 +21,7 @@ Goal is that these voxel grids will contain all past/future voxels for a run
 that intersect the current timestep's mapping volume
 """
 
-def get_metadatas(voxel_dir):
+def get_metadatas(voxel_dir, device):
     """
     faster to just load all the yamls than to load and discard the voxel data
     """
@@ -34,7 +34,7 @@ def get_metadatas(voxel_dir):
             origin = mconfig['origin'],
             length = mconfig['length'],
             resolution = mconfig['resolution'],
-        )
+        ).to(device)
         metadatas.append(metadata)
 
     return metadatas
@@ -62,7 +62,34 @@ def compute_overlaps(metadatas):
 
         maxidx.append(curr_maxidx)
 
-    return maxidx
+    return torch.tensor(maxidx)
+
+def crop_voxel_grid(voxel_grid, metadata_new):
+    """
+    Crop a voxel grid to the metadata provided
+    """
+    assert torch.allclose(voxel_grid.metadata.resolution, metadata_new.resolution)
+    
+    grid_idxs = voxel_grid.raster_indices_to_grid_indices(voxel_grid.raster_indices)
+
+    px_shift = torch.round(
+            (metadata_new.origin - voxel_grid.metadata.origin) / voxel_grid.metadata.resolution
+        ).long()
+
+    grid_idxs_new = grid_idxs - px_shift.view(1,3)
+
+    voxel_grid.metadata = metadata_new
+    mask = voxel_grid.grid_idxs_in_bounds(grid_idxs_new)
+
+    voxel_grid.raster_indices = voxel_grid.grid_indices_to_raster_indices(grid_idxs_new[mask])
+    voxel_grid.features = voxel_grid.features[mask[voxel_grid.feature_mask]]
+    voxel_grid.feature_mask = voxel_grid.feature_mask[mask]
+    voxel_grid.hits = voxel_grid.hits[mask]
+    voxel_grid.misses = voxel_grid.misses[mask]
+    voxel_grid.min_coords = voxel_grid.min_coords[mask]
+    voxel_grid.max_coords = voxel_grid.max_coords[mask]
+
+    return voxel_grid
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -76,10 +103,11 @@ if __name__ == '__main__':
 
     voxel_dir = os.path.join(args.run_dir, args.voxel_dir)
     output_dir = os.path.join(args.run_dir, args.output_dir if args.output_dir else args.voxel_dir + '_inpaint')
+    os.makedirs(output_dir, exist_ok=True)
 
     print(f'processing {voxel_dir} -> {output_dir} ({N} frames)')
 
-    all_metadatas = get_metadatas(voxel_dir)
+    all_metadatas = get_metadatas(voxel_dir, args.device)
     overlaps = compute_overlaps(all_metadatas)
 
     ## now that we have the last frame, re-aggregate the voxels
@@ -93,6 +121,7 @@ if __name__ == '__main__':
     voxel_grid = VoxelGridTorch.from_kitti(voxel_dir, 0, args.device).voxel_grid
     agg_voxel_grid = VoxelGrid(metadata=agg_metadata, feature_keys=voxel_grid.feature_keys, device=args.device)
 
+    ## by default we probably just want to copy latest if there's a feature
     localmapper = VoxelLocalMapper(
         metadata = agg_metadata,
         feature_keys = voxel_grid.feature_keys,
@@ -100,6 +129,8 @@ if __name__ == '__main__':
         ema = 1.0,
         device = args.device
     )
+
+    saved_frames = []
 
     for ii in range(N):
         curr_voxel_grid = VoxelGridTorch.from_kitti(voxel_dir, ii, args.device).voxel_grid
@@ -115,12 +146,31 @@ if __name__ == '__main__':
         localmapper.update_pose(pose)
         localmapper.add_feature_pc(pose, fpc)
 
-        if ii % 100 == 0:
-            o3d.visualization.draw_geometries([
-                localmapper.voxel_grid.metadata.visualize(),
-                localmapper.voxel_grid.visualize(),
-                curr_voxel_grid.metadata.visualize()
-            ])
+        ## TODO extract the aggregated voxel grid from the current metadata
+        save_idxs = torch.argwhere(ii == overlaps).flatten()
+
+        print(f'itr {ii}/{N}, saving {save_idxs.shape[0]} frames', end='\r')
+
+        for si in save_idxs:
+            saved_frames.append(si)
+
+            query_metadata = all_metadatas[si]
+
+            inpaint_vg = crop_voxel_grid(
+                copy.deepcopy(localmapper.voxel_grid),
+                query_metadata
+            )
+
+            vgt_out = VoxelGridTorch.from_voxel_grid(inpaint_vg)
+            vgt_out.to_kitti(output_dir, si)
+
+            base_vg = VoxelGridTorch.from_kitti(voxel_dir, si, device=localmapper.device).voxel_grid
+
+            print(f'saved frame {si} ({base_vg.raster_indices.shape[0]}->{inpaint_vg.raster_indices.shape[0]} voxels)')
+
+    ## verify
+    out_idxs = torch.tensor(saved_frames)
+    assert (out_idxs.sort()[0] == torch.arange(N)).all()
 
     # for i, (metadata, overlap) in enumerate(zip(all_metadatas, overlaps)):
     #     idxs = torch.arange(i, overlap)

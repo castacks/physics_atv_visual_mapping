@@ -9,7 +9,7 @@ from types import MethodType
 
 from physics_atv_visual_mapping.image_processing.loftup.upsamplers import load_loftup_checkpoint, norm, unnorm
 from physics_atv_visual_mapping.image_processing.loftup.featurizers import get_featurizer
-from physics_atv_visual_mapping.image_processing.loftup.utils import plot_feats
+from physics_atv_visual_mapping.feature_key_list import FeatureKeyList
 
 from physics_atv_visual_mapping.image_processing.processing_blocks.base import ImageProcessingBlock
 import cv2
@@ -32,9 +32,6 @@ class LoftUpBlock(ImageProcessingBlock):
         torch.hub.set_dir(os.path.join(models_dir, "torch_hub"))
         model, patch_size, dim = get_featurizer(featurizer_class, dino_dir)
         self.model = model.to('cuda')
-        # kernel_size = patch_size
-        # lr_size = 224 // patch_size
-        # load_size = 224
 
         upsampler = torch.hub.load(loftup_dir, torch_hub_name, pretrained=True, source='local')
         self.upsampler = upsampler.to('cuda')
@@ -65,8 +62,6 @@ class LoftUpBlock(ImageProcessingBlock):
         iy = image.shape[2]
         dy = img_out.shape[2]
 
-        # print(image.shape, img_out.shape)
-
         intrinsics[:, 0, 0] *= (dx/ix)
         intrinsics[:, 0, 2] *= (dx/ix)
 
@@ -80,7 +75,7 @@ class LoftUpBlock(ImageProcessingBlock):
     def output_feature_keys(self):
         #n_layers = sum of layer.outchannels for layer in self.dino.layers
         # n_layers = sum(self.dino.dino_model.embed_dim for layer in self.dino.layers)
-        n_layers = 20
+        n_layers = 384
 
         return FeatureKeyList(
             label=[f"{self.loftup_type}_{i}" for i in range(n_layers)],

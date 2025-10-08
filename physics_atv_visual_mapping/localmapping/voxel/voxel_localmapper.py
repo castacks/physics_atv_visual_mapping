@@ -198,6 +198,10 @@ class VoxelLocalMapper(LocalMapper):
             self.raytracer = self.raytracer.to(device)
         return self
 
+class VoxelCovarianceLocalMapper(VoxelLocalMapper):
+    def __init__(self, metadata, feature_keys, ema, raytracer=None, n_features=-1, device='cpu'):
+        super().__init__(metadata, feature_keys, ema, raytracer, n_features, device)
+
 class VoxelCoordinateLocalMapper(VoxelLocalMapper):
     """
     Voxel localmapper class that maps image coordinates instead of features directly

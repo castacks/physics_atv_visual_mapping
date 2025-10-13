@@ -91,4 +91,4 @@
         n_features: 16
         terrain_layer: terrain
         terrain_mask_layer: min_elevation_filtered_inflated_mask
-      overhang: 2.0
+        overhang: 2.0

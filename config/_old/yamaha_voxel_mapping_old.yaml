@@ -1,0 +1,186 @@
+models_dir: /home/tartandriver/tartandriver_ws/models #necessary to include this for non-ROS offline proc
+
+images:
+    image_left_color:
+        image_topic: /multisense/left/image_rect_color
+        camera_info_topic: /multisense/left/camera_info
+        image_compressed: False
+        folder: image
+
+        #camera intrinsics
+        intrinsics:
+            K: [455.7750, 0., 497.1180, 0., 456.3191, 251.8580, 0., 0., 1.]
+            P: [455.7750, 0., 497.1180, 0., 456.3191, 251.8580, 0., 0., 1.]
+
+        #transform from the vehicle link to the camera link
+        extrinsics:
+            p: [0.17265, -0.15227, 0.05708]
+            q: [0.55940, -0.54718, 0.44603, 0.43442]
+
+
+pointcloud:
+   topic: /superodometry/velodyne_cloud_registered
+   folder: pointcloud_in_odom
+
+odometry:
+    topic: /superodometry/integrated_to_init
+    folder: odometry
+
+gridmap:
+    topic: local_gridmap
+    folder: local_gridmap
+
+#the base link of the vehicle (e.g. base_link, vehicle, etc.)
+vehicle_frame: vehicle 
+
+image_processing:
+    # -
+    #     type: dino
+    #     args:
+    #         dino_type: dinov2_vitb14_reg
+    #         dino_layers: [10]
+    #         image_insize: [854, 448]
+
+    #         desc_facet: value
+    # - 
+    #     type: pca
+    #     args:
+    #         fp: physics_atv_visual_mapping/pca/vitb_reg_64_gascola_veg.pt
+
+    -
+        type: radio_lang
+        args:
+            image_insize: [848, 448]
+            radio_type: c-radio_v3-b
+            adaptor_type: siglip2
+
+    - 
+        type: pca
+        args:
+            fp: physics_atv_visual_mapping/pca/radio_v3b_siglip2.pt
+
+# voxel
+localmapping:
+    mapper_type: voxel
+    ema: 0.5 #higher->use recent more
+    n_features: -1
+    metadata:
+        origin: [-50., -50., -10.]
+        length: [100., 100., 20.]
+        resolution: [0.4, 0.4, 0.1]
+
+    raytracer:
+        type: frustum
+        sensor:
+            type: VLP32C-front
+
+            # type: VLP32C
+        
+            # type: generic
+        
+            # n_el: 72 #number of bins
+            # el_range: [-25., 15.] #min/max angle
+            # el_thresh: default #optional arg to filter based on remainder
+
+            # n_az: 900
+            # az_range: [-180, 180.]
+            # az_thresh: default
+
+terrain_estimation:
+    -
+        type: elevation_stats
+        args:
+            use_voxel_centers: false
+
+    -
+        type: porosity
+        args: {}
+
+    -
+        type: elevation_filter
+        args:
+            input_layer: min_elevation
+            cnt_layer: num_voxels
+
+            height_low_thresh: -3.0 #cells this far below their neighbors are not terrain
+            height_high_thresh: 0.5 #cells this far above their neighbors are not terrain
+
+            kernel_params:
+                kernel_type: gaussian #one of {gaussian/box} the kernel type to use for inflation
+
+                kernel_radius: 2. #kernel radius in m
+                kernel_sharpness: 5. #sharpness of (Gaussian) kernel
+
+                # kernel_radius: 0.25 #kernel radius in m
+                # kernel_sharpness: 0.5 #sharpness of (Gaussian) kernel
+
+    -
+        type: terrain_inflation
+        args:
+            input_layer: min_elevation_filtered
+            mask_layer: min_elevation_filtered_mask
+
+            thresh: 0.05 #at least this frac of neighboring cells in the kernel must be observed
+
+            kernel_params:
+                kernel_type: gaussian #one of {gaussian/box} the kernel type to use for inflation
+
+                kernel_radius: 5. #kernel radius in m
+                kernel_sharpness: 2. #sharpness of (Gaussian) kernel
+
+                # kernel_radius: 0.5 #kernel radius in m
+                # kernel_sharpness: 1.0 #sharpness of (Gaussian) kernel
+
+    - 
+        type: mrf_terrain_estimation
+        args: 
+            input_layer: min_elevation_filtered_inflated
+            mask_layer: min_elevation_filtered_inflated_mask
+
+            itrs: 5   #num updates
+            alpha: 10. #weight on the measurement update
+            beta: 1.  #weight on the neighbor update
+            lr: 0.05   #learning rate
+
+            kernel_params:
+                kernel_type: gaussian #one of {gaussian/box} the kernel type to use for inflation
+
+                kernel_radius: 1. #kernel radius in m
+                kernel_sharpness: 2. #sharpness of (Gaussian) kernel
+
+                # kernel_radius: 0.5
+                # kernel_sharpness: 1.0
+
+    - 
+        type: slope
+        args:
+            input_layer: terrain
+            mask_layer: min_elevation_filtered_inflated_mask
+            radius: 0.25
+            max_slope: 2.0
+            kernel_type: scharr
+
+    - 
+        type: normals_sobel
+        args:
+            slope_x_layer: slope_x
+            slope_y_layer: slope_y
+            mask_layer: min_elevation_filtered_inflated_mask
+
+    -
+        type: terrain_diff
+        args:
+            terrain_layer: terrain
+            overhang: 2.0
+
+    -
+        type: terrain_aware_bev_feature_splat
+        args:
+            metainfo_key: vfm
+            n_features: 16
+            terrain_layer: terrain
+            terrain_mask_layer: min_elevation_filtered_inflated_mask
+            overhang: 2.0
+
+device: cuda
+viz: True

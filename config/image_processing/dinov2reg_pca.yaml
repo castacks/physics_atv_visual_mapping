@@ -1,0 +1,12 @@
+-
+    type: dino
+    args:
+        dino_type: dinov2_vitb14_reg
+        dino_layers: [10]
+        image_insize: [854, 448]
+
+        desc_facet: value
+- 
+    type: pca
+    args:
+        fp: physics_atv_visual_mapping/pca/vitb_reg_64_gascola_veg.pt

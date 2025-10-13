@@ -3,6 +3,7 @@ import argparse
 
 import torch
 import open3d as o3d
+import matplotlib.pyplot as plt
 
 from tartandriver_utils.os_utils import kitti_n_frames
 from tartandriver_utils.o3d_viz_utils import make_bev_mesh, normalize_dino
@@ -28,6 +29,73 @@ def make_bev_viz(bev_grid):
     )
 
     return mesh
+
+def make_bev_cmp_viz(base_bev, inpaint_bev):
+    base_nvox_idx = base_bev.feature_keys.index('num_voxels')
+    inpaint_nvox_idx = inpaint_bev.feature_keys.index('num_voxels')
+
+    base_terrain_idx = base_bev.feature_keys.index('terrain')
+    inpaint_terrain_idx = inpaint_bev.feature_keys.index('terrain')
+
+    base_vfm_idxs = [i for i,k in enumerate(base_bev.feature_keys.metainfo) if k == 'vfm']
+    inpaint_vfm_idxs = [i for i,k in enumerate(inpaint_bev.feature_keys.metainfo) if k == 'vfm']
+
+    extent = (
+        base_bev.metadata.origin[0].item(),
+        base_bev.metadata.origin[0].item() + base_bev.metadata.length[0].item(),
+        base_bev.metadata.origin[1].item(),
+        base_bev.metadata.origin[1].item() + base_bev.metadata.length[1].item()
+    )
+
+    base_voxels = base_bev.data[..., base_nvox_idx]
+    inpaint_voxels = inpaint_bev.data[..., inpaint_nvox_idx]
+
+    base_terrain = base_bev.data[..., base_terrain_idx]
+    inpaint_terrain = inpaint_bev.data[..., inpaint_terrain_idx]
+
+    base_vfm = base_bev.data[..., base_vfm_idxs]
+    inpaint_vfm = inpaint_bev.data[..., inpaint_vfm_idxs]
+
+    fig, axs = plt.subplots(3, 3, figsize=(18, 12))
+
+    axs[0, 0].set_title('base voxel count')
+    axs[1, 0].set_title('inpaint voxel count')
+    axs[2, 0].set_title('voxel diff')
+
+    axs[0, 1].set_title('base terrain')
+    axs[1, 1].set_title('inpaint terrain')
+    axs[2, 1].set_title('terrain diff')
+
+    axs[0, 2].set_title('base features')
+    axs[1, 2].set_title('inpaint features')
+    axs[2, 2].set_title('feature diff')
+
+    for ax in axs.flatten():
+        ax.set_xlabel('X(m)')
+        ax.set_ylabel('Y(m)')
+
+    voxel_vmax = inpaint_voxels.max()
+    voxel_diff = (inpaint_voxels - base_voxels).abs()
+
+    terrain_vmin = inpaint_terrain.min()
+    terrain_vmax = inpaint_terrain.max()
+    terrain_diff = (inpaint_terrain - base_terrain).abs()
+
+    vfm_diff = torch.linalg.norm(inpaint_vfm - base_vfm, dim=-1)
+
+    axs[0, 0].imshow(base_voxels.T.cpu().numpy(), vmin=0., vmax=voxel_vmax, cmap='jet', extent=extent)
+    axs[1, 0].imshow(inpaint_voxels.T.cpu().numpy(), vmin=0., vmax=voxel_vmax, cmap='jet', extent=extent)
+    axs[2, 0].imshow(voxel_diff.T.cpu().numpy(), cmap='jet', extent=extent)
+
+    axs[0, 1].imshow(base_terrain.T.cpu().numpy(), vmin=terrain_vmin, vmax=terrain_vmax, cmap='jet', extent=extent)
+    axs[1, 1].imshow(inpaint_terrain.T.cpu().numpy(), vmin=terrain_vmin, vmax=terrain_vmax, cmap='jet', extent=extent)
+    axs[2, 1].imshow(terrain_diff.T.cpu().numpy(), cmap='jet', extent=extent)
+
+    axs[0, 2].imshow(normalize_dino(base_vfm).permute(1,0,2).cpu().numpy(), extent=extent)
+    axs[1, 2].imshow(normalize_dino(inpaint_vfm).permute(1,0,2).cpu().numpy(), extent=extent)
+    axs[2, 2].imshow(vfm_diff.T.cpu().numpy(), cmap='jet', extent=extent)
+
+    return fig, axs
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -65,6 +133,10 @@ if __name__ == '__main__':
 
         print(f"|base - inpaint| = {(base_cnts==1).sum()} (should be small)")
         print(f"|inpaint - base| = {(inpaint_cnts==1).sum()} (should be big)")
+
+        ## 2d viz
+        fig, axs = make_bev_cmp_viz(base_bev, inpaint_bev)
+        plt.show()
 
         o3d.visualization.draw_geometries([base_vg_viz, base_bev_viz], window_name='base')
         o3d.visualization.draw_geometries([inpaint_vg_viz, inpaint_bev_viz], window_name='gt')

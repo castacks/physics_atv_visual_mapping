@@ -1,0 +1,6 @@
+-
+    type: radio_lang
+    args:
+        image_insize: [848, 448]
+        radio_type: c-radio_v3-b
+        adaptor_type: siglip2

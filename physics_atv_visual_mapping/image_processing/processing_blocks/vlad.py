@@ -14,6 +14,14 @@ class VLADBlock(ImageProcessingBlock):
         self.vlad = VLAD(n_clusters, desc_dim=desc_dim, cache_dir=cache_dir)
         self.vlad.fit(None)
 
+        # import numpy as np
+        # descs = np.load('/home/tartandriver/tartandriver_ws/loftup_dinov2s_224x224_feats.npy')
+        # descs = descs.reshape(-1, descs.shape[-1])
+        # # descs = descs[::2]
+        # descs = torch.from_numpy(descs).cuda()
+        # self.vlad = VLAD(n_clusters, desc_dim=desc_dim, cache_dir=cache_dir)
+        # self.vlad.fit(descs)
+
     def run(self, image, intrinsics, image_orig):
         img_outs = []
 

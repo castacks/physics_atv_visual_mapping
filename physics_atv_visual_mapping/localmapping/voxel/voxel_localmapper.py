@@ -325,7 +325,7 @@ class VoxelLocalMapper(LocalMapper):
 
         cull_mask = cull_mask & ~bottom_voxel_mask
 
-        if debug:
+        if False:
             import open3d as o3d
             pts = self.voxel_grid.grid_indices_to_pts(self.voxel_grid.raster_indices_to_grid_indices(self.voxel_grid.raster_indices))
             #solid=black, porous=green, cull=red
@@ -461,7 +461,6 @@ class VoxelCovarianceLocalMapper(VoxelLocalMapper):
     def add_feature_pc(self, pos: torch.Tensor, feat_pc: FeaturePointCloudTorch, do_raytrace=False, debug=False):
         
         voxel_grid_new = VoxelCovarianceGrid.from_feature_pc(feat_pc, self.metadata, self.n_features)
-
 
         self.voxel_grid.feature_keys = voxel_grid_new.feature_keys
 
@@ -1122,13 +1121,13 @@ class VoxelCovarianceGrid(VoxelGrid):
             #first scatter and average the feature points
             grid_idxs, valid_mask = voxelgrid.get_grid_idxs(feature_pts)
             valid_grid_idxs = grid_idxs[valid_mask]
-            valid_feats = feature_pts_features[valid_mask]
-
+            
             valid_raster_idxs = voxelgrid.grid_indices_to_raster_indices(valid_grid_idxs) #for each PC point, which voxel it belongs to
 
             # --- Filter points with too large covariances ---
-            eps = 1e-6
             device = feat_pc.device
+            eps = 1e-6
+            eps_eye = eps *  torch.eye(3, device=device)
             pts = feat_pc.feature_pts                          # [N, 3]
 
             feature_keys = feat_pc.feature_keys 
@@ -1173,11 +1172,13 @@ class VoxelCovarianceGrid(VoxelGrid):
                 reduce="sum"
             )
 
+            weights = 1.0 / voxel_counts[inv_idxs].clamp_min(1.0) 
 
-            weights = 1.0 / voxel_counts[inv_idxs].clamp_min(1.0)
-
-            # --- Fuse covariances and centers ---
-            precisions = torch.linalg.inv(valid_covs + eps * torch.eye(3, device=device))
+            # Compute precisions via Cholesky solve (without explicit inverse)
+            L = torch.linalg.cholesky(valid_covs + eps_eye)               # [N,3,3]
+            # Solve L L^T X = I to get precision matrices
+            I3 = torch.eye(3, device=device).expand(valid_covs.shape[0], 3, 3)
+            precisions = torch.cholesky_solve(I3, L)                     # [N,3,3]
 
             weighted_precisions = weights[:, None, None] * precisions
             fused_precision_sum = torch_scatter.scatter(
@@ -1189,32 +1190,11 @@ class VoxelCovarianceGrid(VoxelGrid):
                 weighted_precision_centers, inv_idxs, dim=0, dim_size=num_voxels, reduce="sum"
             )
 
-            fused_covariances = torch.linalg.inv(fused_precision_sum + eps * torch.eye(3, device=device))
-            fused_centers = (fused_covariances @ fused_precision_center_sum.unsqueeze(-1)).squeeze(-1)
+            # Compute fused covariance and centers without explicit inverse
+            L_fused = torch.linalg.cholesky(fused_precision_sum + eps_eye)
+            fused_covariances = torch.cholesky_solve(torch.eye(3, device=device).expand(num_voxels, 3, 3), L_fused)
+            fused_centers = torch.cholesky_solve(fused_precision_center_sum.unsqueeze(-1), L_fused).squeeze(-1)
 
-            # --- Mahalanobis-based color weighting ---
-            d = 3
-            chol_covs = torch.linalg.cholesky(valid_covs + eps * torch.eye(3, device=device))
-            deltas = valid_pts - fused_centers[inv_idxs]
-            sol = torch.cholesky_solve(deltas.unsqueeze(-1), chol_covs)
-            mahalanobis_sq = torch.sum(deltas * sol.squeeze(-1), dim=-1)
-
-            logdet = 2.0 * torch.sum(torch.log(torch.diagonal(chol_covs, dim1=1, dim2=2)), dim=1)
-            norm_const = torch.exp(-0.5 * (d * torch.log(torch.tensor(2.0 * torch.pi, device=device)) + logdet))
-
-            final_weights = norm_const * torch.exp(-0.5 * mahalanobis_sq)
-
-            # Normalize weights **per voxel**
-            sum_weights_per_voxel = torch_scatter.scatter_sum(final_weights, inv_idxs, dim=0, dim_size=num_voxels)
-            normalized_weights = final_weights / sum_weights_per_voxel[inv_idxs].clamp_min(eps)
-
-            # # Weighted color average
-            # fused_colors = torch_scatter.scatter_add(
-            #     valid_colors * normalized_weights.unsqueeze(-1),
-            #     inv_idxs,
-            #     dim=0,
-            #     dim_size=num_voxels
-            # )
             # Compute mean color per voxel instead of weighted fusion
             fused_colors = torch_scatter.scatter_mean(
                 valid_colors,
@@ -1227,22 +1207,23 @@ class VoxelCovarianceGrid(VoxelGrid):
             feat_buf = torch.cat([fused_colors, fused_covariances.reshape(-1, 9), fused_centers], dim=1)
 
             # --- Non-feature voxels ---
-            grid_idxs, valid_mask = voxelgrid.get_grid_idxs(feat_pc.non_feature_pts)
-            valid_grid_idxs = grid_idxs[valid_mask]
-            valid_raster_idxs = voxelgrid.grid_indices_to_raster_indices(valid_grid_idxs)
-            non_feature_raster_idxs = torch.unique(valid_raster_idxs)
+            valid_mask = voxelgrid.get_grid_idxs(feat_pc.non_feature_pts)[1]
+            non_feature_raster_idxs = voxelgrid.grid_indices_to_raster_indices(voxelgrid.get_grid_idxs(feat_pc.non_feature_pts)[0][valid_mask])
+            non_feature_raster_idxs = torch.unique(non_feature_raster_idxs)
 
-            _raster_idxs_cnt_in = torch.cat([feature_raster_idxs, feature_raster_idxs, non_feature_raster_idxs])
-            _raster_idxs, _raster_idx_cnts = torch.unique(_raster_idxs_cnt_in, return_counts=True)
-            non_feature_raster_idxs = _raster_idxs[_raster_idx_cnts == 1]
+            # Keep only non-feature voxels that are not already in feature_raster_idxs
+            all_raster_idxs_combined = torch.cat([feature_raster_idxs, non_feature_raster_idxs])
+            unique_raster_idxs, counts = torch.unique(all_raster_idxs_combined, return_counts=True)
+            non_feature_raster_idxs = unique_raster_idxs[counts == 1]
 
-            n_feat_voxels = feature_raster_idxs.shape[0]
+            # Combine feature and non-feature voxels
             all_raster_idxs = torch.cat([feature_raster_idxs, non_feature_raster_idxs])
             feat_mask = torch.zeros(all_raster_idxs.shape[0], dtype=torch.bool, device=feat_pc.device)
-            feat_mask[:n_feat_voxels] = True
+            feat_mask[:feature_raster_idxs.shape[0]] = True
 
-            all_raster_idxs, idxs = torch.sort(all_raster_idxs)
-            feat_mask = feat_mask[idxs]
+            # Sort raster indices and align mask
+            all_raster_idxs, sort_idx = torch.sort(all_raster_idxs)
+            feat_mask = feat_mask[sort_idx]
 
             # --- Assign to voxel grid ---
             voxelgrid.raster_indices = all_raster_idxs
@@ -1265,13 +1246,10 @@ class VoxelCovarianceGrid(VoxelGrid):
                 src=all_valid_pts, index=inv_idxs, dim_size=all_raster_idxs.shape[0], reduce="max", dim=0
             )
 
-
             if False:
-                visualize_feature_pc_with_covariances(                    feature_pc=feat_pc,                    vgt=voxelgrid.visualize(),
+                visualize_feature_pc_with_covariances( feature_pc=feat_pc, vgt=voxelgrid.visualize(),
                     # voxel_covs=voxelgrid.features[:, cov_idxs].view(-1, 3, 3),
                     # every_nth_point=100
                 )
                 import pdb; pdb.set_trace()
             return voxelgrid
-
-

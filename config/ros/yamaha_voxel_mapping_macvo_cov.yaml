@@ -80,30 +80,22 @@ image_processing:
 
 # voxel
 localmapping:
+localmapping:
     mapper_type: voxel_covariance
-    layer_key: dino
     ema: 0.5 #higher->use recent more
-    n_features: 12
+    n_features: -1
     metadata:
-        # origin: [-100., -100., -30.]
-        # length: [200., 200., 60.]
-        # resolution: [0.8, 0.8, 0.8]
-        # origin: [-50., -50., -10.]
-        # length: [100., 100., 20.]
+        origin: [-50., -50., -10.]
+        length: [100., 100., 20.]
+        resolution: [0.4, 0.4, 0.1]
+        # origin: [-40., -40., -10.]
+        # length: [80., 80., 20.]
+        # resolution: [0.3, 0.3, 0.1]
 
-        origin: [-25., -25., -10.]
-        length: [50., 50., 20.]
-
-
-        resolution: [0.1, 0.1, 0.05] # z changed from 0.1 -> 0.05
-        # origin: [-30., -30., -15.]
-        # length: [60., 60., 30.]
-        # resolution: [0.2, 0.2, 0.2]
-
-    raytracer:
-        type: frustum
-        sensor:
-            type: VLP32C-front
+    # raytracer:
+    #     type: frustum
+    #     sensor:
+    #         type: VLP32C-front
 
             # type: VLP32C
         

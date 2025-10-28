@@ -47,27 +47,27 @@ image_processing:
     #         n_clusters: 8
     #         cache_dir: physics_atv_visual_mapping/dino_clusters/8_clusters_364x686_
 
-    -
-        type: loftup
-        args:
-            image_insize: [224, 224]
-    - 
-        type: vlad
-        args:
-            n_clusters: 8
-            cache_dir: physics_atv_visual_mapping/dino_clusters/8_clusters_loftup_dinov2s_224x224
-
     # -
-    #     type: jafar
+    #     type: loftup
     #     args:
     #         image_insize: [224, 224]
     # - 
     #     type: vlad
     #     args:
-    #         n_clusters: 16
-    #         cache_dir: physics_atv_visual_mapping/dino_clusters/16_clusters_jafar_dinov2s_224x224
-    #         # n_clusters: 16
-    #         # cache_dir: physics_atv_visual_mapping/dino_clusters/16_clusters_jafar_dinov2b_224x224
+    #         n_clusters: 8
+    #         cache_dir: physics_atv_visual_mapping/dino_clusters/8_clusters_loftup_dinov2s_224x224
+
+    -
+        type: jafar
+        args:
+            image_insize: [224, 224]
+    - 
+        type: vlad
+        args:
+            n_clusters: 16
+            cache_dir: physics_atv_visual_mapping/dino_clusters/16_clusters_jafar_dinov2s_224x224
+            # n_clusters: 16
+            # cache_dir: physics_atv_visual_mapping/dino_clusters/16_clusters_jafar_dinov2b_224x224
 
     # -
     #     type: radio_lang

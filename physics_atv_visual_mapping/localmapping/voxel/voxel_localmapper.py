@@ -1149,6 +1149,21 @@ class VoxelCovarianceGrid(VoxelGrid):
             pts = pts[valid_mask]
             colors = colors[valid_mask]
             covs = covs[valid_mask]
+            
+            # Filter out non-positive definite covariances based on determinant
+            # A matrix is positive definite if all eigenvalues > 0, which means det > 0
+            # (though det > 0 is necessary but not sufficient, we also check smallest eigenvalue)
+            covs_det = torch.linalg.det(covs)
+            eigvals_min = torch.linalg.eigvalsh(covs).min(dim=1).values
+            pd_mask = (covs_det > 0) & (eigvals_min > 0)
+            
+            n_removed = (~pd_mask).sum().item()
+            if n_removed > 0:
+                print(f"Removing {n_removed}/{covs.shape[0]} non-positive-definite covariances")
+            
+            pts = pts[pd_mask]
+            colors = colors[pd_mask]
+            covs = covs[pd_mask]
 
 
             # --- Only use pts that are in the new voxelgrid!---
@@ -1175,7 +1190,30 @@ class VoxelCovarianceGrid(VoxelGrid):
             weights = 1.0 / voxel_counts[inv_idxs].clamp_min(1.0) 
 
             # Compute precisions via Cholesky solve (without explicit inverse)
+            
+            # # Debug: Print valid_covs information
+            # print(f"valid_covs shape: {valid_covs.shape}")
+            # print(f"valid_covs dtype: {valid_covs.dtype}, device: {valid_covs.device}")
+            # print(f"valid_covs stats - min: {valid_covs.min().item():.6f}, max: {valid_covs.max().item():.6f}, mean: {valid_covs.mean().item():.6f}")
+            
+            # # Check for NaN or Inf values
+            # if torch.isnan(valid_covs).any():
+            #     print(f"WARNING: Found {torch.isnan(valid_covs).sum().item()} NaN values in valid_covs!")
+            # if torch.isinf(valid_covs).any():
+            #     print(f"WARNING: Found {torch.isinf(valid_covs).sum().item()} Inf values in valid_covs!")
+            
+            # # Print first few matrices for inspection
+            # print(f"First 3 covariance matrices:\n{valid_covs[:3]}")
+            
+            # # Check positive definiteness by eigenvalues
+            # eigvals = torch.linalg.eigvalsh(valid_covs)
+            # is_pd = (eigvals > 0).all(dim=1)
+            # n_pd = is_pd.sum().item()
+            # n_not_pd = (~is_pd).sum().item()
+            # print(f"Positive definite check: {n_pd}/{valid_covs.shape[0]} are PD, {n_not_pd} are NOT PD (min eigenvalue: {eigvals.min().item():.2e})")
+            
             L = torch.linalg.cholesky(valid_covs + eps_eye)               # [N,3,3]
+            
             # Solve L L^T X = I to get precision matrices
             I3 = torch.eye(3, device=device).expand(valid_covs.shape[0], 3, 3)
             precisions = torch.cholesky_solve(I3, L)                     # [N,3,3]

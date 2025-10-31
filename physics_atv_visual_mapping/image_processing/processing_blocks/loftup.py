@@ -1,7 +1,7 @@
 import os
 import torch
 import torchvision
-
+import numpy as np
 import math
 import torch.nn.functional as F
 from torch.nn.modules.utils import _pair
@@ -36,6 +36,10 @@ class LoftUpBlock(ImageProcessingBlock):
         upsampler = torch.hub.load(loftup_dir, torch_hub_name, pretrained=True, source='local')
         self.upsampler = upsampler.to('cuda')
 
+        ####
+        self.save_samples = []
+        self.save_count = 1
+
     def preprocess(self, img):
         assert len(img.shape) == 4, 'need to batch images'
         assert img.shape[1] == 3, 'expects channels-first'
@@ -69,6 +73,18 @@ class LoftUpBlock(ImageProcessingBlock):
         intrinsics[:, 1, 2] *= (dy/iy)
         # torch.cuda.synchronize()
         # print(time.perf_counter() - now)
+
+        # # ####img_out
+        # save_samples = img_out[0,:,40:-20,:].cpu().flatten(1).numpy() #assuming 244x244
+        # save_samples = save_samples.T
+        # sample_ids = np.random.choice(len(save_samples), size=100)
+        # save_samples = save_samples[sample_ids]
+        # self.save_samples.append(save_samples)
+        # if self.save_count % 10 == 0:
+        #     np.save("/home/tartandriver/tartandriver_ws/loftup_dinov2s_thermal_224x224_feats", np.array(self.save_samples))
+        #     print("_________________________________________", self.save_count)
+        # self.save_count += 1
+
         return img_out, intrinsics
 
     @property

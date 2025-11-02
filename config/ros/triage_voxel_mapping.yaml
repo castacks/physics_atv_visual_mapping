@@ -58,6 +58,8 @@ terrain_estimation:
             input_layer: min_elevation_filtered
             mask_layer: min_elevation_filtered_mask
 
+            thresh: 0.05 #at least this frac of neighboring cells in the kernel must be observed
+
             kernel_params:
                 kernel_type: gaussian #one of {gaussian/box} the kernel type to use for inflation
 

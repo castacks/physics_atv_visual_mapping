@@ -95,3 +95,10 @@ class FeatureKeyList:
         """
         idxs = [i for i,m in enumerate(self.metainfo) if m==k]
         return self[idxs]
+    
+    def dump(self):
+        return [f"{label}, {meta}" for label, meta in zip(self.label, self.metainfo)]
+    
+    def load(input):
+        labels, metas = zip(*[s.split(', ') for s in input])
+        return FeatureKeyList(label=list(labels), metainfo=list(metas))

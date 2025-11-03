@@ -15,7 +15,7 @@ class VLADBlock(ImageProcessingBlock):
         self.vlad.fit(None)
 
         # import numpy as np
-        # descs = np.load('/home/tartandriver/tartandriver_ws/loftup_dinov2s_thermal_224x224_feats.npy')
+        # descs = np.load('/home/tartandriver/tartandriver_ws/loftup_dinov2s_224x224_feats.npy')
         # descs = descs.reshape(-1, descs.shape[-1])
         # # descs = descs[::2]
         # descs = torch.from_numpy(descs).cuda()

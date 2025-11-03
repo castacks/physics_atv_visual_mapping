@@ -1,0 +1,15 @@
+
+## example localmapping config
+
+mapper_type: voxel                      ## one of {bev, voxel}. Whether to map in 2.5d or 3d
+ema: 0.5                                ## how to merge multiple features together (output will be ema*new + (1-ema)*old)
+n_features: -1                          ## number of features to map per cell. if -1, matches the number of input features
+metadata:                               ## metadata of the space to map (2d if bev, 3d if voxel)
+    origin: [-50., -50., -10.]          ## position (m) of lower-bottom-left corner of map w.r.t. pose
+    length: [100., 100., 20.]           ## position (m) of upper-top-right corner w.r.t. origin
+    resolution: [0.4, 0.4, 0.1]         ## size (m) of a cell
+
+raytracer:                              ## optional raytracing config for voxels
+    type: frustum
+    sensor:
+        type: VLP32C-front

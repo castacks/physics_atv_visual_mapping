@@ -88,6 +88,15 @@ class LocalMapperMetadata:
         out.lines = o3d.utility.Vector2iVector(adj)
 
         return out
+    
+    def extent(self):
+        """
+        Returns: (xmin, xmax, ymin, ymax) for matplotlib stuff
+        """
+        res = []
+        for i in range(self.ndims):
+            res.extend([self.origin[i].item(), self.origin[i].item() + self.length[i].item()])
+        return res
 
     def __eq__(self, other):
         if self.ndims != other.ndims:

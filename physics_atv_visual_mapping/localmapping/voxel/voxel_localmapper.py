@@ -199,10 +199,13 @@ class VoxelLocalMapper(LocalMapper):
 
         assert ema >= 0. and ema <= 1.
 
+        assert ema >= 0. and ema <= 1.
+
         self.voxel_grid = VoxelGrid(self.metadata, self.feature_keys, device)
         self.raytracer = raytracer
         self.do_raytrace = self.raytracer is not None
         self.ema = ema
+        self.assert_feat_match = True
         self.assert_feat_match = True
 
     def update_pose(self, pose: torch.Tensor):
@@ -222,7 +225,10 @@ class VoxelLocalMapper(LocalMapper):
 
     def add_feature_pc(self, pos: torch.Tensor, feat_pc: FeaturePointCloudTorch, do_raytrace=False, debug=False):
         voxel_grid_new = VoxelGrid.from_feature_pc(feat_pc, self.metadata, self.n_features, pos, strategy='mindist')
+        voxel_grid_new = VoxelGrid.from_feature_pc(feat_pc, self.metadata, self.n_features, pos, strategy='mindist')
 
+        if self.assert_feat_match:
+            assert self.voxel_grid.feature_keys == voxel_grid_new.feature_keys, f"voxel feat key mismatch: mapper has {self.voxel_grid.feature_keys}, added pc has {voxel_grid_new.feature_keys}"
         if self.assert_feat_match:
             assert self.voxel_grid.feature_keys == voxel_grid_new.feature_keys, f"voxel feat key mismatch: mapper has {self.voxel_grid.feature_keys}, added pc has {voxel_grid_new.feature_keys}"
 
@@ -256,6 +262,11 @@ class VoxelLocalMapper(LocalMapper):
         )
         vg1_feat_buf_mask = torch.zeros(vg1_feat_buf.shape[0], dtype=torch.bool, device=self.voxel_grid.device)
 
+        vg2_feat_buf = torch.zeros(
+            unique_feature_raster_idxs.shape[0],
+            voxel_grid_new.features.shape[-1],
+            device=self.voxel_grid.device,
+        )
         vg2_feat_buf = torch.zeros(
             unique_feature_raster_idxs.shape[0],
             voxel_grid_new.features.shape[-1],
@@ -345,6 +356,26 @@ class VoxelLocalMapper(LocalMapper):
         feat_cull_mask = cull_mask[self.voxel_grid.feature_mask]
         self.voxel_grid.features = self.voxel_grid.features[~feat_cull_mask]
         self.voxel_grid.feature_mask = self.voxel_grid.feature_mask[~cull_mask]
+
+    def _merge_voxel_features(self, vg1_feats, vg1_mask, vg2_feats, vg2_mask):
+        """
+        Merge voxel grid features together with EMA
+        Args:
+            vg1_feats: [NxF] Tensor of raster feats from voxel grid 1. Note that this should be raster-padded w/ vg2
+                (i.e. this is after the cat+uniq op)
+            vg1_mask:  [N] Tensor which is True iff. that raster idx has a feature in vg1
+            vg2_feats: Same as vg1_feats for vg2
+            vg2_mask:  Same as vg1_mask for vg2
+        Returns:
+            feats_out: [NxF] Tensor of merged features for all unique raster indices
+        """
+        feats_out = vg1_feats.clone()
+        merge_mask = vg1_mask & vg2_mask
+        feats_out[vg1_mask & ~merge_mask] = vg1_feats[vg1_mask & ~merge_mask]
+        feats_out[vg2_mask & ~merge_mask] = vg2_feats[vg2_mask & ~merge_mask]
+        feats_out[merge_mask] = (1.-self.ema) * vg1_feats[merge_mask] + self.ema * vg2_feats[merge_mask]
+
+        return feats_out
 
     def _merge_voxel_features(self, vg1_feats, vg1_mask, vg2_feats, vg2_mask):
         """
@@ -662,12 +693,67 @@ class VoxelCovarianceLocalMapper(VoxelLocalMapper):
 
         if False:
             visualize_feature_pc_with_covariances( vgt=self.voxel_grid.visualize(), voxel_covs=self.voxel_grid.features[:,cov_idxs].view(-1,3,3), every_nth_point=5)
-            # import pdb; pdb.set_trace()
+
 
 class VoxelGrid:
     """
     Actual class that handles feature aggregation
     """
+    def _get_voxel_features_mindist(voxelgrid, pts, features, pos):
+        grid_idxs, valid_mask = voxelgrid.get_grid_idxs(pts)
+        dists = torch.linalg.norm(pts - pos[:3].view(1,3), dim=-1)
+
+        valid_grid_idxs = grid_idxs[valid_mask]
+        valid_feats = features[valid_mask]
+        valid_dists = dists[valid_mask]
+
+        valid_raster_idxs = voxelgrid.grid_indices_to_raster_indices(valid_grid_idxs)
+        
+        sort_idxs = valid_raster_idxs.argsort()
+
+        valid_raster_idxs = valid_raster_idxs[sort_idxs]
+        valid_feats = valid_feats[sort_idxs]
+        valid_dists = valid_dists[sort_idxs]
+        feature_raster_idxs, inv_idxs = valid_raster_idxs.unique(return_inverse=True, sorted=True)
+
+        raster_mindists = torch_scatter.scatter(
+            src=valid_dists,
+            index=inv_idxs,
+            dim_size=feature_raster_idxs.shape[0],
+            reduce='min'
+        )
+
+        voxel_is_mindist = (valid_dists - raster_mindists[inv_idxs]).abs() < 1e-16
+        if voxel_is_mindist.sum() != feature_raster_idxs.shape[0]:
+            if voxel_is_mindist.sum() < feature_raster_idxs.shape[0]:
+                print("uh oh not all voxels have a mindist")
+                import pdb;pdb.set_trace()
+
+        voxel_is_mindist = voxel_is_mindist.float().unsqueeze(-1)
+
+        feat_buf = torch_scatter.scatter(
+            src=valid_feats * voxel_is_mindist,
+            index=inv_idxs,
+            dim_size=feature_raster_idxs.shape[0],
+            reduce="sum",
+            dim=0
+        )
+
+        ## need to do an extra scatter of the mask to handle cases where voxel_is_mindist True for multiple pts in voxel
+        ## e.g. if the same point is in there twice
+        ## hopefully same spatial pos -> same feature, otherwise tough luck :)
+        cnt = torch_scatter.scatter(
+            src=voxel_is_mindist,
+            index=inv_idxs,
+            dim_size=feature_raster_idxs.shape[0],
+            reduce="sum",
+            dim=0
+        )
+
+        voxel_feats = feat_buf / cnt
+
+        return feature_raster_idxs, voxel_feats
+
     def _get_voxel_features_mindist(voxelgrid, pts, features, pos):
         grid_idxs, valid_mask = voxelgrid.get_grid_idxs(pts)
         dists = torch.linalg.norm(pts - pos[:3].view(1,3), dim=-1)
@@ -739,6 +825,38 @@ class VoxelGrid:
         )
 
         return feature_raster_idxs, feat_buf
+
+    def from_feature_pc(feat_pc, metadata, n_features=-1, pos=None, strategy='avg'):
+        """
+        Instantiate a VoxelGrid from a feauture pc
+
+        Steps:
+            1. separate out feature points and non-feature points
+        """
+        n_features = len(feat_pc.feature_keys) if n_features == -1 else n_features
+        feat_keys = feat_pc.feature_keys[:n_features]
+
+        voxelgrid = VoxelGrid(metadata, feat_keys, feat_pc.device)
+
+        feature_pts = feat_pc.feature_pts.clone()
+        feature_pts_features = feat_pc.features[:, :n_features].clone()
+
+        #first scatter and average the feature points
+        if strategy == 'avg':
+            feature_raster_idxs, voxel_features = VoxelGrid._get_voxel_features_scatter(
+                voxelgrid, feature_pts, feature_pts_features
+            )
+        elif strategy == 'mindist':
+            feature_raster_idxs, voxel_features = VoxelGrid._get_voxel_features_mindist(
+                voxelgrid, feature_pts, feature_pts_features, pos
+                # voxelgrid.to('cpu'), feature_pts.to('cpu'), feature_pts_features.to('cpu'), pos.to('cpu')
+            )
+
+        # voxelgrid = voxelgrid.to('cuda')
+        # feature_raster_idxs = feature_raster_idxs.to('cuda')
+        # voxel_features = voxel_features.to('cuda')
+
+        return feature_raster_idxs, feat_buf
     
     def from_feature_pc(feat_pc, metadata, n_features=-1, pos=None, strategy='avg'):
         """
@@ -771,6 +889,7 @@ class VoxelGrid:
         # voxel_features = voxel_features.to('cuda')
 
         #then add in non-feature points
+        non_feature_pts = feat_pc.non_feature_pts.clone()
         non_feature_pts = feat_pc.non_feature_pts.clone()
         grid_idxs, valid_mask = voxelgrid.get_grid_idxs(non_feature_pts)
         valid_grid_idxs = grid_idxs[valid_mask]

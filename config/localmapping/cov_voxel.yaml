@@ -1,0 +1,10 @@
+mapper_type: voxel_covariance
+ema: 0.5 #higher->use recent more
+n_features: -1
+metadata:
+    # origin: [-50., -50., -10.]
+    # length: [100., 100., 20.]
+    # resolution: [0.4, 0.4, 0.1]
+    origin: [-25., -25., -5.]
+    length: [50., 50., 10.]
+    resolution: [0.4, 0.4, 0.1]

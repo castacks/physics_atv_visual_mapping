@@ -16,7 +16,7 @@ from physics_atv_visual_mapping.image_processing.processing_blocks.radio_lang im
 # from physics_atv_visual_mapping.image_processing.processing_blocks.ganav import GANavBlock
 from physics_atv_visual_mapping.image_processing.processing_blocks.traversability_prototypes import TraversabilityPrototypesBlock
 from physics_atv_visual_mapping.image_processing.processing_blocks.loftup import LoftUpBlock
-from physics_atv_visual_mapping.image_processing.processing_blocks.jafar import JafarBlock
+# from physics_atv_visual_mapping.image_processing.processing_blocks.jafar import JafarBlock
 
 from physics_atv_visual_mapping.utils import normalize_dino
 import os

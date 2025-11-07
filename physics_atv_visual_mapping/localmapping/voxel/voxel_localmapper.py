@@ -1,15 +1,64 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.cm as cm
+import open3d as o3d
 import torch
 import torch_scatter
-import open3d as o3d
-
-from numpy import pi as PI
 
 from ros_torch_converter.datatypes.pointcloud import FeaturePointCloudTorch
-
 from physics_atv_visual_mapping.localmapping.base import LocalMapper
 from physics_atv_visual_mapping.localmapping.metadata import LocalMapperMetadata
 from physics_atv_visual_mapping.feature_key_list import FeatureKeyList
 from physics_atv_visual_mapping.utils import *
+
+def hist(var):
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+    var_np = var.cpu().numpy()
+    ncols = var_np.shape[1] if var_np.ndim > 1 else 1
+
+    if ncols == 1:
+        plt.figure(figsize=(4, 4))
+        plt.hist(var_np, bins=100)
+    elif ncols == 2:
+        plt.figure(figsize=(8, 4))
+        for i in range(2):
+            plt.subplot(1, 2, i + 1)
+            plt.hist(var_np[:, i], bins=100)
+    else:
+        plt.figure(figsize=(12, 4))
+        for i in range(min(3, ncols)):
+            plt.subplot(1, 3, i + 1)
+            plt.hist(var_np[:, i], bins=100)
+
+    plt.tight_layout()
+    plt.show()
+
+def create_grid(size=10, step=1.0):
+    # Build points
+    points = []
+    lines = []
+    idx = 0
+    for i in np.arange(-size, size+step, step):
+        # vertical line along y
+        points.append([i, -size, 0])
+        points.append([i, size, 0])
+        lines.append([idx, idx+1])
+        idx += 2
+        # horizontal line along x
+        points.append([-size, i, 0])
+        points.append([size, i, 0])
+        lines.append([idx, idx+1])
+        idx += 2
+
+    points = o3d.utility.Vector3dVector(np.array(points))
+    lines = o3d.utility.Vector2iVector(np.array(lines))
+
+    line_set = o3d.geometry.LineSet(points=points, lines=lines)
+    line_set.colors = o3d.utility.Vector3dVector(np.tile([0.5, 0.5, 0.5], (len(lines), 1)))
+    return line_set
+
 
 class VoxelLocalMapper(LocalMapper):
     """Class for local mapping voxels"""
@@ -72,7 +121,6 @@ class VoxelLocalMapper(LocalMapper):
         vg2_inv_idxs = inv_idxs[self.voxel_grid.raster_indices.shape[0] :]
         vg2_feat_inv_idxs = feat_inv_idxs[self.voxel_grid.feature_raster_indices.shape[0]:]
         vg2_has_feature = voxel_grid_new.feature_mask #this line requires that the voxel grid is sorted by raster idx
-
         vg1_feat_buf = torch.zeros(
             unique_feature_raster_idxs.shape[0],
             self.voxel_grid.features.shape[-1],
@@ -328,7 +376,6 @@ class VoxelGrid:
         valid_feats = features[valid_mask]
 
         valid_raster_idxs = voxelgrid.grid_indices_to_raster_indices(valid_grid_idxs)
-
         #NOTE: we need the voxel raster indices to be in ascending order (at least, within feat/no-feat) for stuff to work
         feature_raster_idxs, inv_idxs = torch.unique(
             valid_raster_idxs, return_inverse=True, sorted=True
@@ -687,3 +734,4 @@ class VoxelGrid:
         self.min_coords = self.min_coords.to(device)
         self.max_coords = self.max_coords.to(device)
         return self
+

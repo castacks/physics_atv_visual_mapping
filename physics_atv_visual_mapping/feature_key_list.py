@@ -83,6 +83,12 @@ class FeatureKeyList:
                 return idx
         raise ValueError(f"Pair ({label_key}, {metainfo_key}) not found in FeatureKeyList.")
 
+    def index_metainfo(self, k):
+        """
+        Returns indices from self that have metainfo=k
+        """
+        return [i for i, m in enumerate(self.metainfo) if m == k]
+
     def filter_metainfo(self, k):
         """
         Return a FeatureKeyList containing fks from self that have metainfo=k

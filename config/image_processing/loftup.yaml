@@ -1,0 +1,4 @@
+-
+    type: loftup
+    args:
+        image_insize: [224, 224]

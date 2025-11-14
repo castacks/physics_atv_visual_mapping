@@ -18,12 +18,12 @@ class LoftUpBlock(ImageProcessingBlock):
     """
     Image processing block that runs clipseg on the image
     """
-    def __init__(self, image_insize, device, models_dir):
+    def __init__(self, image_insize, featurizer, upsampler, device, models_dir):
         self.device = device
         self.input_size = image_insize
 
-        featurizer_class = "dinov2" # "dinov2", "dinov2b", "dinov2s_reg", "dinov2b_reg", "clip", "siglip", "siglip2"
-        torch_hub_name = "loftup_dinov2s" # "loftup_dinov2s", "loftup_dinov2b", "loftup_dinov2s_reg", "loftup_dinov2b_reg", "loftup_clip", "loftup_siglip", "loftup_siglip2"
+        featurizer_class = featurizer # "dinov2", "dinov2b", "dinov2s_reg", "dinov2b_reg", "clip", "siglip", "siglip2"
+        torch_hub_name =  upsampler # "loftup_dinov2s", "loftup_dinov2b", "loftup_dinov2s_reg", "loftup_dinov2b_reg", "loftup_clip", "loftup_siglip", "loftup_siglip2"
 
         dino_dir = os.path.join(models_dir, "torch_hub", "facebookresearch_dinov2_main")
         loftup_dir = os.path.join(models_dir, "torch_hub", "andrehuang_loftup_main")

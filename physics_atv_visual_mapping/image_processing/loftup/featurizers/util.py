@@ -1,4 +1,5 @@
 import torch
+import os
 
 def get_featurizer(name, models_dir, activation_type="token", **kwargs):
     name = name.lower()
@@ -21,6 +22,17 @@ def get_featurizer(name, models_dir, activation_type="token", **kwargs):
         from .DINOv2 import DINOv2Featurizer
         patch_size = 14
         model = DINOv2Featurizer(models_dir, "dinov2_vitb14_reg", patch_size, activation_type)
+        dim = 768
+    elif name == "anythermal":
+        from .DINOv2 import DINOv2Featurizer
+        patch_size = 14
+        models_top_dir = models_dir.split('/')[0]
+        model_file = os.path.join('physics_atv_visual_mapping', 'anythermal.pth')
+        model_data = torch.load(os.path.join('/home/tartandriver/tartandriver_ws/models', model_file))
+        model_type = model_data['student_model_type']
+        model = DINOv2Featurizer(models_dir, model_type, patch_size, activation_type)
+        state_dictionary = {f"model.{k}": v for k, v in model_data['student_model_state_dict']['backbone_model_state_dict'].items()}
+        model.load_state_dict(state_dictionary)
         dim = 768
     elif name == "clip":
         from .CLIP import CLIPFeaturizer

@@ -7,6 +7,7 @@ from physics_atv_visual_mapping.image_processing.processing_blocks.dino import (
 from physics_atv_visual_mapping.image_processing.processing_blocks.radio import (
     RadioBlock,
 )
+from physics_atv_visual_mapping.image_processing.processing_blocks.anythermal import AnyThermalBlock
 from physics_atv_visual_mapping.image_processing.processing_blocks.pca import PCABlock
 from physics_atv_visual_mapping.image_processing.processing_blocks.vlad import VLADBlock
 from physics_atv_visual_mapping.image_processing.processing_blocks.pca_vlad import (
@@ -35,6 +36,8 @@ def setup_image_pipeline(config):
             block = SAMBlock(**block_config["args"], models_dir=config["models_dir"])
         elif btype == "radio":
             block = RadioBlock(**block_config["args"], models_dir=config["models_dir"])
+        elif btype == "anythermal":
+            block = AnyThermalBlock(**block_config["args"], models_dir=config["models_dir"])
         elif btype == "pca":
             block = PCABlock(**block_config["args"], models_dir=config["models_dir"])
         elif btype == "vlad":

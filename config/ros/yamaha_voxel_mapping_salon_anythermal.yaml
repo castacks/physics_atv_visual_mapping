@@ -1,0 +1,14 @@
+## define location of models e.g. Dino/RADIO/etc.
+models_dir: /home/tartandriver/tartandriver_ws/models #necessary to include this for non-ROS offline proc
+
+## define image processing pipeline (e.g. how to compute image-space features from raw)
+image_processing: !include /home/tartandriver/tartandriver_ws/src/perception/physics_atv_visual_mapping/config/image_processing/loftup_vlad_anythermal.yaml
+
+## define localmapping representation (e.g. voxel/BEV, mapping extent, etc.)
+localmapping: !include /home/tartandriver/tartandriver_ws/src/perception/physics_atv_visual_mapping/config/localmapping/voxel.yaml
+
+## optionally, define how to compute a terrain representation from mapping representation
+terrain_estimation: !include /home/tartandriver/tartandriver_ws/src/perception/physics_atv_visual_mapping/config/terrain_estimation/voxel_to_bev_8.yaml
+
+device: cuda
+viz: True

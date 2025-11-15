@@ -9,3 +9,4 @@
     type: pca
     args:
         fp: physics_atv_visual_mapping/pca/radio_v3b_siglip2.pt
+        n_features: 32

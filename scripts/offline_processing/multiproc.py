@@ -27,7 +27,10 @@ if __name__ == '__main__':
     for rdir in sorted(run_dirs):
         print('\t' + rdir)
 
-    base_cmd = "python3 get_voxel_inpainting_supervision.py --run_dir {}"
+    # base_cmd = "python3 get_voxel_inpainting_supervision.py --run_dir {}"
+
+    base_cmd = "python3 sdf_to_traj.py --run_dir {}"
+    base_cmd2 = "python3 sdf_to_traj.py --run_dir {} --bev_dir bev_map_inpaint_reduce"
 
     success_dirs = []
     fail_dirs = []
@@ -35,12 +38,23 @@ if __name__ == '__main__':
     for ri, run_dir in enumerate(run_dirs):
         print("Proc {} ({}/{})".format(run_dir, ri+1, len(run_dirs)))
 
-        # cmd = base_cmd.format(args.config_fp, run_dir)
-        cmd = base_cmd.format(run_dir)
+        # cmd = base_cmd.format(run_dir)
 
-        res = subprocess.run(cmd.split(" "))
+        # res = subprocess.run(cmd.split(" "))
 
-        if res.returncode == 0:
+        # if res.returncode == 0:
+        #     success_dirs.append(run_dir)
+        # else:
+        #     fail_dirs.append(run_dir)
+
+
+        cmd1 = base_cmd.format(run_dir)
+        cmd2 = base_cmd2.format(run_dir)
+
+        res = subprocess.run(cmd1.split(" "))
+        res2 = subprocess.run(cmd2.split(" "))
+
+        if (res.returncode == 0) and (res2.returncode == 0):
             success_dirs.append(run_dir)
         else:
             fail_dirs.append(run_dir)

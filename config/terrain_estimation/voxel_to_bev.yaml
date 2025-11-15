@@ -88,7 +88,7 @@
     type: terrain_aware_bev_feature_splat
     args:
         metainfo_key: vfm
-        n_features: 16
+        n_features: 32
         terrain_layer: terrain
         terrain_mask_layer: min_elevation_filtered_inflated_mask
         overhang: 2.0

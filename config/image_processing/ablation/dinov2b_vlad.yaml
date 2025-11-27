@@ -1,0 +1,11 @@
+-
+    type: dinov2_featurizer
+    args:
+        model_type: dinov2b
+        input_size: [224,224]
+
+- 
+    type: vlad
+    args:
+        n_clusters: 8
+        cache_dir: physics_atv_visual_mapping/dino_clusters/8_clusters_dinov2b_16x16

@@ -8,6 +8,8 @@ from physics_atv_visual_mapping.image_processing.processing_blocks.radio import 
     RadioBlock,
 )
 from physics_atv_visual_mapping.image_processing.processing_blocks.anythermal import AnyThermalBlock
+from physics_atv_visual_mapping.image_processing.processing_blocks.dinov2_featurizer import DinoV2FeaturizerBlock
+from physics_atv_visual_mapping.image_processing.processing_blocks.bilinear_upsample import BilinearUpBlock
 from physics_atv_visual_mapping.image_processing.processing_blocks.pca import PCABlock
 from physics_atv_visual_mapping.image_processing.processing_blocks.vlad import VLADBlock
 from physics_atv_visual_mapping.image_processing.processing_blocks.pca_vlad import (
@@ -32,6 +34,8 @@ def setup_image_pipeline(config):
         block_config["args"]["device"] = config["device"]
         if btype == "dino":
             block = Dinov2Block(**block_config["args"], models_dir=config["models_dir"])
+        elif btype == "dinov2_featurizer":
+            block = DinoV2FeaturizerBlock(**block_config["args"], models_dir=config["models_dir"])
         elif btype == "sam":
             block = SAMBlock(**block_config["args"], models_dir=config["models_dir"])
         elif btype == "radio":
@@ -50,6 +54,8 @@ def setup_image_pipeline(config):
             block = RadioLangBlock(**block_config["args"], models_dir=config["models_dir"])
         elif btype == "loftup":
             block = LoftUpBlock(**block_config["args"], models_dir=config["models_dir"])
+        elif btype == "bilinear":
+            block = BilinearUpBlock(**block_config["args"], models_dir=config["models_dir"])
         elif btype == "jafar":
             block = JafarBlock(**block_config["args"], models_dir=config["models_dir"])
         elif btype == "traversability_prototypes":

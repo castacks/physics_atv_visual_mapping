@@ -1,0 +1,10 @@
+-
+    type: bilinear
+    args:
+        image_insize: [224,224]
+        featurizer: anythermal
+
+- 
+    type: pca
+    args:
+        fp: physics_atv_visual_mapping/pca/pca_bilinear_anythermal_thermal_224x224.pt

@@ -1,0 +1,9 @@
+-
+    type: bilinear
+    args:
+        image_insize: [224,224]
+        featurizer: dinov2b
+- 
+    type: pca
+    args:
+        fp: physics_atv_visual_mapping/pca/pca_bilinear_dinov2b_rgb_224x224.pt

@@ -20,6 +20,10 @@ class AnyThermalBlock(ImageProcessingBlock):
         model, patch_size, dim = get_featurizer("anythermal", dino_dir)
         self.model = model.to('cuda')
         self.input_size = input_size
+
+        # for saving descriptors for fitting VLAD
+        self.save_samples = []
+        self.save_count = 1
     
     def preprocess(self, img):
         assert len(img.shape) == 4, 'need to batch images'
@@ -43,6 +47,18 @@ class AnyThermalBlock(ImageProcessingBlock):
 
         intrinsics[:, 1, 1] *= (dy/iy)
         intrinsics[:, 1, 2] *= (dy/iy)
+
+        # save descriptors for vlad
+        # save_samples = img_out[0,:,2:-1,:].cpu().flatten(1).numpy() #assuming 16x16
+        # save_samples = save_samples.T
+        # np.random.seed(42)
+        # sample_ids = np.random.choice(len(save_samples), size=100)
+        # save_samples = save_samples[sample_ids]
+        # self.save_samples.append(save_samples)
+        # if self.save_count % 10 == 0:
+        #     np.save("/home/tartandriver/tartandriver_ws/anythermal_thermal_16x16_feats", np.array(self.save_samples))
+        #     print("_________________________________________", self.save_count)
+        # self.save_count += 1
         
         return img_out, intrinsics
     

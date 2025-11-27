@@ -1,0 +1,9 @@
+-
+    type: anythermal
+    args:
+        input_size: [224, 224]
+
+- 
+    type: pca
+    args:
+        fp: physics_atv_visual_mapping/pca/pca_anythermal_thermal_16x16.pt

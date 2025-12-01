@@ -11,7 +11,7 @@ class PCABlock(ImageProcessingBlock):
     Block that applies a precomputed PCA to the image
     """
 
-    def __init__(self, fp, models_dir, device):
+    def __init__(self, fp, models_dir, n_features=-1, device='cuda'):
         full_fp = os.path.join(models_dir, fp)
         pca = torch.load(full_fp, weights_only=False)
 
@@ -28,6 +28,10 @@ class PCABlock(ImageProcessingBlock):
             "V": pca["V"].to(device),
         }
 
+        self.n_features = n_features
+
+        assert self.n_features <= self.pca["V"].shape[-1] 
+
     def run(self, image, intrinsics, image_orig):
         _pmean = self.pca["mean"].view(1, 1, -1)
         _pv = self.pca["V"].unsqueeze(0)
@@ -40,11 +44,15 @@ class PCABlock(ImageProcessingBlock):
             image.shape[0], _pv.shape[-1], image.shape[2], image.shape[3]
         )
 
+        if self.n_features >= 0:
+            img_out = img_out[:, :self.n_features]
+
         return img_out, intrinsics
 
     @property
     def output_feature_keys(self):
+        N = self.pca["V"].shape[-1] if self.n_features == -1 else self.n_features
         return FeatureKeyList(
-            label=[f"{self.base_label}_{i}" for i in range(self.pca["V"].shape[-1])],
-            metainfo=["vfm" for i in range(self.pca["V"].shape[-1])]
+            label=[f"{self.base_label}_{i}" for i in range(N)],
+            metainfo=["vfm" for i in range(N)]
         )

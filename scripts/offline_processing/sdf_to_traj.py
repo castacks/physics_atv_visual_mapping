@@ -57,8 +57,13 @@ if __name__ == '__main__':
         mindists = torch.linalg.norm(coords.unsqueeze(1) - poses.unsqueeze(0), dim=-1).min(dim=1)[0]
         mindists = mindists.reshape(*metadata.N)
 
-        bev_grid.bev_grid.feature_keys += FeatureKeyList(label=['dist_to_traj'], metainfo=['spatial'])
-        bev_grid.bev_grid.data = torch.cat([bev_grid.bev_grid.data, mindists.unsqueeze(-1)], dim=-1)
+        ## remove spatial if there
+        idxs = [i for i,k in enumerate(bev_grid.bev_grid.feature_keys.label) if k != 'dist_to_traj']
+        _fks = bev_grid.bev_grid.feature_keys[idxs]
+        _data = bev_grid.bev_grid.data[..., idxs]
+
+        bev_grid.bev_grid.feature_keys = _fks + FeatureKeyList(label=['dist_to_traj'], metainfo=['spatial'])
+        bev_grid.bev_grid.data = torch.cat([_data, mindists.unsqueeze(-1)], dim=-1)
 
         bev_grid.to_kitti(bev_dir, i)
 

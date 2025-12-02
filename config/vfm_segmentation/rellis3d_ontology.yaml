@@ -1,0 +1,79 @@
+0:
+  id: dirt
+  prompt: dirt
+  color: [108, 64, 20]
+
+1:
+  id: grass
+  prompt: grass or dry grass
+  color: [0, 102, 0]
+
+2:
+  id: tree
+  prompt: tree
+  color: [0, 255, 0]
+
+3:
+  id: pole
+  prompt: pole
+  color: [0, 153, 153]
+
+4:
+  id: water
+  prompt: water
+  color: [0, 128, 255]
+
+5:
+  id: sky
+  prompt: sky
+  color: [0, 0, 255]
+
+6:
+  id: vehicle
+  prompt: vehicle
+  color: [255, 255, 0]
+
+7:
+  id: object
+  prompt: object
+  color: [255, 0, 127]
+
+8:
+  id: road
+  prompt: asphalt or gravel
+  color: [64, 64, 64]
+
+9:
+  id: building
+  prompt: building
+  color: [255, 0, 0]
+
+10:
+  id: log
+  prompt: log
+  color: [102, 0, 0]
+
+11:
+  id: person
+  prompt: person
+  color: [204, 152, 255]
+
+12:
+  id: fence
+  prompt: fence
+  color: [102, 0, 204]
+
+13:
+  id: bush
+  prompt: bushes or dry bushes
+  color: [17, 59, 12]
+
+14:
+  id: rock
+  prompt: rocks
+  color: [72, 72, 72]
+
+15:
+  id: snow
+  prompt: snow
+  color: [204, 204, 204]

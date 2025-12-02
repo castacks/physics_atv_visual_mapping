@@ -2,8 +2,6 @@ import torch
 import torch_scatter
 import open3d as o3d
 
-from numpy import pi as PI
-
 from ros_torch_converter.datatypes.pointcloud import FeaturePointCloudTorch
 
 from physics_atv_visual_mapping.localmapping.base import LocalMapper
@@ -149,6 +147,11 @@ class VoxelLocalMapper(LocalMapper):
         feat_cull_mask = cull_mask[self.voxel_grid.feature_mask]
         self.voxel_grid.features = self.voxel_grid.features[~feat_cull_mask]
         self.voxel_grid.feature_mask = self.voxel_grid.feature_mask[~cull_mask]
+
+    def reset(self, pose=None):
+        self.voxel_grid = VoxelGrid(self.metadata, self.n_features, self.device)
+        if pose is not None:
+            self.update_pose(pose)
 
     def to(self, device):
         self.device = device

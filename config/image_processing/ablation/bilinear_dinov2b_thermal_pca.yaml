@@ -7,4 +7,4 @@
 - 
     type: pca
     args:
-        fp: physics_atv_visual_mapping/pca/pca_bilinear_dinov2b_rgb_224x224.pt
+        fp: physics_atv_visual_mapping/pca/pca_bilinear_dinov2b_thermal_224x224.pt

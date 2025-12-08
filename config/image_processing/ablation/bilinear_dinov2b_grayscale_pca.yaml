@@ -3,8 +3,8 @@
     args:
         image_insize: [224,224]
         featurizer: dinov2b
-        grayscale: False
+        grayscale: True
 - 
     type: pca
     args:
-        fp: physics_atv_visual_mapping/pca/pca_bilinear_dinov2b_rgb_224x224.pt
+        fp: physics_atv_visual_mapping/pca/pca_bilinear_dinov2b_rgb_grayscale_224x224.pt

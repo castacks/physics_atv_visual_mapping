@@ -12,7 +12,7 @@ class DinoV2FeaturizerBlock(ImageProcessingBlock):
     Image processing block that outputs DINOv2 patch features
     """
 
-    def __init__(self, model_type, input_size, device, models_dir):
+    def __init__(self, model_type, input_size, grayscale, device, models_dir):
         # load model
         dino_dir = os.path.join(models_dir, "torch_hub", "facebookresearch_dinov2_main")
         model, patch_size, dim = get_featurizer(model_type, dino_dir)
@@ -20,6 +20,8 @@ class DinoV2FeaturizerBlock(ImageProcessingBlock):
         self.input_size = input_size
         self.dim = dim
         self.model_type = model_type
+        # boolean for whether to convert to grayscale before featurizing (applies for RGB images only)
+        self.grayscale = grayscale
 
         # for saving descriptors for fitting VLAD
         self.save_samples = []
@@ -28,6 +30,9 @@ class DinoV2FeaturizerBlock(ImageProcessingBlock):
     def preprocess(self, img):
         assert len(img.shape) == 4, 'need to batch images'
         assert img.shape[1] == 3, 'expects channels-first'
+        if self.grayscale:
+            grayscale = torchvision.transforms.Grayscale(num_output_channels=3)
+            img = grayscale(img)
         img = img.cuda().float()
         img = torchvision.transforms.functional.resize(img,(self.input_size[1],self.input_size[0]))
         return img

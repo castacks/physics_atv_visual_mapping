@@ -18,7 +18,7 @@ class BilinearUpBlock(ImageProcessingBlock):
     """
     Image processing block that runs upsamples image using bilinear interpolation
     """
-    def __init__(self, image_insize, featurizer, device, models_dir):
+    def __init__(self, image_insize, featurizer, grayscale, device, models_dir):
         self.device = device
         self.input_size = image_insize
 
@@ -31,6 +31,9 @@ class BilinearUpBlock(ImageProcessingBlock):
 
         self.dim = dim
 
+        # boolean for whether to convert to grayscale before featurizing (applies for RGB images only)
+        self.grayscale = grayscale
+
         ####
         self.save_samples = []
         self.save_count = 1
@@ -38,6 +41,9 @@ class BilinearUpBlock(ImageProcessingBlock):
     def preprocess(self, img):
         assert len(img.shape) == 4, 'need to batch images'
         assert img.shape[1] == 3, 'expects channels-first'
+        if self.grayscale:
+            grayscale = torchvision.transforms.Grayscale(num_output_channels=3)
+            img = grayscale(img)
         img = img.cuda().float()
         img = torchvision.transforms.functional.resize(img,(self.input_size[1],self.input_size[0]))
         return img

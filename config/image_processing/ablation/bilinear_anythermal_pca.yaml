@@ -3,6 +3,7 @@
     args:
         image_insize: [224,224]
         featurizer: anythermal
+        grayscale: False
 
 - 
     type: pca

@@ -3,8 +3,8 @@
     args:
         model_type: dinov2b
         input_size: [224,224]
-        grayscale: False
+        grayscale: True
 - 
     type: pca
     args:
-        fp: physics_atv_visual_mapping/pca/pca_dinov2b_rgb_16x16.pt
+        fp: physics_atv_visual_mapping/pca/pca_dinov2b_rgb_grayscale_16x16.pt

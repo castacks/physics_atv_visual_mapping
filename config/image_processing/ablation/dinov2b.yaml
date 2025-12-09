@@ -1,0 +1,6 @@
+-
+    type: dinov2_featurizer
+    args:
+        model_type: dinov2b
+        input_size: [224,224]
+        grayscale: False

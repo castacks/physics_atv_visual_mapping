@@ -1,0 +1,4 @@
+-
+    type: anythermal
+    args:
+        input_size: [224, 224]

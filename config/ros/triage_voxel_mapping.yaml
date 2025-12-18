@@ -6,6 +6,15 @@ localmapping:
     layer_key: dino
     ema: 0.5 #higher->use recent more
     n_features: 3
+    
+    # Dynamic obstacle clearing parameters
+    passthrough_thresh: 0.4  # Lower = faster clearing (0.5 means 50% miss rate triggers cull)
+    hit_miss_decay: 0.85     # Decay factor per frame (lower = faster clearing, 1.0 = no decay)
+    range_buffer: 0.1        # Buffer distance (m) for conservative clearing
+    max_clear_range: 25.0    # When a lidar bin has NO measurement, assume the ray traveled this far
+    max_hit_confidence: 15.0 # Maximum hit confidence (caps accumulated hits to avoid infinite mass)
+    min_misses: 3.0          # Minimum number of misses required before a voxel can be culled
+    
     metadata:
         origin: [-15., -15., -3.]
         length: [30., 30., 6.]

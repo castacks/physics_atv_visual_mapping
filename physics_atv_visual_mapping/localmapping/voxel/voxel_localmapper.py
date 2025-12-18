@@ -10,7 +10,23 @@ from physics_atv_visual_mapping.utils import *
 class VoxelLocalMapper(LocalMapper):
     """Class for local mapping voxels"""
 
-    def __init__(self, metadata, n_features, ema, raytracer=None, device='cpu'):
+    def __init__(self, metadata, n_features, ema, raytracer=None, device='cpu',
+                 passthrough_thresh=0.4, hit_miss_decay=0.85, range_buffer=0.1,
+                 max_clear_range=25.0, max_hit_confidence=15.0, min_misses=3.0):
+        """
+        Args:
+            metadata: LocalMapperMetadata for the voxel grid
+            n_features: Number of features per voxel
+            ema: Exponential moving average weight for feature updates
+            raytracer: Optional raytracer for dynamic obstacle clearing
+            device: torch device
+            passthrough_thresh: Threshold for miss/(hit+miss) ratio to cull voxels (lower = faster clearing)
+            hit_miss_decay: Decay factor for hit/miss counts each frame (1.0 = no decay, lower = faster clearing)
+            range_buffer: Buffer distance (m) subtracted from measured range for safer clearing
+            max_clear_range: Maximum range (m) to use for clearing when no measurement in bin.
+            max_hit_confidence: Maximum hit confidence value to clamp hits to (prevents infinite mass)
+            min_misses: Minimum number of misses required before culling a voxel
+        """
         super().__init__(metadata, device)
         assert metadata.ndims == 3, "VoxelLocalMapper requires 3d metadata"
         self.voxel_grid = VoxelGrid(self.metadata, n_features, device)
@@ -18,6 +34,12 @@ class VoxelLocalMapper(LocalMapper):
         self.raytracer = raytracer
         self.do_raytrace = self.raytracer is not None
         self.ema = ema
+        self.passthrough_thresh = passthrough_thresh
+        self.hit_miss_decay = hit_miss_decay
+        self.range_buffer = range_buffer
+        self.max_clear_range = max_clear_range
+        self.max_hit_confidence = max_hit_confidence
+        self.min_misses = min_misses
 
     def update_pose(self, pose: torch.Tensor):
         """
@@ -35,12 +57,14 @@ class VoxelLocalMapper(LocalMapper):
         self.voxel_grid.shift(px_shift)
         self.metadata.origin = new_origin
 
-    def add_feature_pc(self, pos: torch.Tensor, feat_pc: FeaturePointCloudTorch, do_raytrace=False, debug=False):
+    def add_feature_pc(self, pos: torch.Tensor, feat_pc: FeaturePointCloudTorch, debug=False):
         voxel_grid_new = VoxelGrid.from_feature_pc(feat_pc, self.metadata, self.n_features)
 
         if self.do_raytrace:
             # self.raytracer.raytrace(pos, voxel_grid_meas=voxel_grid_new, voxel_grid_agg=self.voxel_grid)
-            self.raytracer.raytrace_but_better(pos, pc_meas=feat_pc, voxel_grid_agg=self.voxel_grid)
+            self.raytracer.raytrace_but_better(pos, pc_meas=feat_pc, voxel_grid_agg=self.voxel_grid, 
+                                                range_buffer=self.range_buffer,
+                                                max_clear_range=self.max_clear_range)
 
         #first map all indices with features
         all_raster_idxs = torch.cat([self.voxel_grid.raster_indices, voxel_grid_new.raster_indices])
@@ -113,10 +137,21 @@ class VoxelLocalMapper(LocalMapper):
         self.voxel_grid.hits = hit_buf
         self.voxel_grid.misses = miss_buf
 
-        #compute passthrough rate
-        passthrough_rate = self.voxel_grid.misses / (self.voxel_grid.hits + self.voxel_grid.misses)
+        # Prevents "Infinite Mass" problem by capping the number of hits
+        self.voxel_grid.hits = torch.clamp(self.voxel_grid.hits, max=self.max_hit_confidence)
 
-        cull_mask = passthrough_rate > 0.75
+        # Decaying misses only allows the map to "forgive" transient noise over time
+        if self.hit_miss_decay < 1.0:
+            self.voxel_grid.misses *= self.hit_miss_decay
+
+        #compute passthrough rate
+        passthrough_rate = self.voxel_grid.misses / (self.voxel_grid.hits + self.voxel_grid.misses + 1e-8)
+
+        # In order to remove a voxel:
+        # 1. Ratio must be bad (passthrough > threshold)
+        # 2. AND we must have seen enough misses to be sure it's gone (> min_misses)
+        # The min_misses check prevents a single lucky ray from deleting a voxel
+        cull_mask = (passthrough_rate > self.passthrough_thresh) & (self.voxel_grid.misses > self.min_misses)
 
         # print('culling {} voxels...'.format(cull_mask.sum()))
 
@@ -130,7 +165,6 @@ class VoxelLocalMapper(LocalMapper):
         cull_mask = cull_mask & ~bottom_voxel_mask
 
         if debug:
-            import open3d as o3d
             pts = self.voxel_grid.grid_indices_to_pts(self.voxel_grid.raster_indices_to_grid_indices(self.voxel_grid.raster_indices))
             #solid=black, porous=green, cull=red
             colors = torch.stack([torch.zeros_like(passthrough_rate), passthrough_rate, torch.zeros_like(passthrough_rate)], dim=-1)

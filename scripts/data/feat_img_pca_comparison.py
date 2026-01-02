@@ -54,8 +54,8 @@ def compute_feat_img_buffer(modality, img_dir, intrinsics, num_frames, img_proc_
             print(f"Frame {ii}/{num_frames}")
         run_pipeline(pipeline, modality, img_dir, ii, intrinsics)
 
-def compute_feature_buffers(rgb_img_proc_fp, thermal_img_proc_fp):
-    num_frames = 1846
+def compute_feature_buffers(args, rgb_img_proc_fp, thermal_img_proc_fp):
+    num_frames = 2831
 
     rgb_img_dir = os.path.join(args.run_dir, 'rgb_image')
     rgb_intrinsics_dir = os.path.join(args.run_dir, 'rgb_raw_image_intrinsics')
@@ -79,11 +79,11 @@ def compute_pca(img_feats, k, modality, out_fp):
     # Save
     base_label = "pca"
     base_metainfo = modality
-    pca_res = {"mean": feat_mean.cpu(), "V": V.cpu(), "base_label": base_label, "base_metainfo": base_metainfo}
+    pca_res = {"mean": feat_mean.cpu(), "V": V.cpu(), "base_label": base_label, "base_metainfo": base_metainfo, "k": k}
     print(f"Saving pca for {modality} to {out_fp}")
     torch.save(pca_res, out_fp)
 
-def compute_pcas(rgb_buffer_fp, rgb_pca_out_fp, thermal_buffer_fp, thermal_pca_out_fp, combined_pca_out_fp):
+def compute_pcas(args, rgb_buffer_fp, rgb_pca_out_fp, thermal_buffer_fp, thermal_pca_out_fp, combined_pca_out_fp):
     # Load buffers
     rgb_buffer = np.load(rgb_buffer_fp)
     thermal_buffer = np.load(thermal_buffer_fp)
@@ -100,22 +100,25 @@ def compute_pcas(rgb_buffer_fp, rgb_pca_out_fp, thermal_buffer_fp, thermal_pca_o
     # print(f"thermal feats shape: {thermal_feats.shape}")
     compute_pca(thermal_feats, args.k, 'thermal', thermal_pca_out_fp)
     
-    combined_buffer = np.concatenate((rgb_feats, thermal_feats), axis=0)
+    combined_buffer = np.concatenate((rgb_buffer, thermal_buffer), axis=1)
     combined_feats = combined_buffer.reshape(-1, combined_buffer.shape[-1])
+    # print(f"combined buffer shape: {combined_buffer.shape}")
     # print(f"combined feats shape: {combined_feats.shape}")
     compute_pca(combined_feats, args.k, 'combined', combined_pca_out_fp)
 
 def get_rgb_img_for_frame(rgb_image_dir, ii):
     rgb_image_fp = os.path.join(rgb_image_dir, "{:08d}.png".format(ii))
     rgb_img = cv2.imread(rgb_image_fp, cv2.IMREAD_UNCHANGED)
+    rgb_img = cv2.cvtColor(rgb_img, cv2.COLOR_BGR2RGB)
     return rgb_img
 
 def get_thermal_img_for_frame(thermal_img_dir, ii):
     thermal_image_fp = os.path.join(thermal_img_dir, "{:08d}.png".format(ii))
     thermal_img = cv2.imread(thermal_image_fp, cv2.IMREAD_UNCHANGED)
+    thermal_img = cv2.cvtColor(thermal_img, cv2.COLOR_BGR2RGB)
     return thermal_img
 
-def apply_pca(feat_img, pca):
+def get_normalized_image_feats(feat_img):
     # reshape from 1 x dim x h x w to (h*w) x dim
     dim = feat_img.shape[1]
     features = feat_img.squeeze(0).permute(1, 2, 0).reshape(-1, dim)
@@ -123,6 +126,11 @@ def apply_pca(feat_img, pca):
     # Center data
     feat_mean = features.mean(dim=0)
     feat_norm = features - feat_mean.unsqueeze(0)
+
+    return feat_norm
+
+def apply_pca(feat_img, pca):
+    feat_norm = get_normalized_image_feats(feat_img)
 
     # (h*w) x dim -> (h*w) x k, where dim is DINO embedding dim and k is # of PCA components
     return feat_norm @ pca['V'].cuda()
@@ -137,7 +145,7 @@ def compute_feature_norms(features):
     norms = torch.norm(features, p=2, dim=-1)
     return norms.cpu().numpy()
 
-def compare_feature_norms(rgb_features, thermal_features, h, w):
+def compare_feature_norms(rgb_img, thermal_img, rgb_features, thermal_features, h, w):
     rgb_norms = compute_feature_norms(rgb_features)
     thermal_norms = compute_feature_norms(thermal_features)
 
@@ -153,35 +161,64 @@ def compare_feature_norms(rgb_features, thermal_features, h, w):
     correlation = np.corrcoef(rgb_norms.flatten(), thermal_norms.flatten())[0,1]
     print(f"Spatial norm correlation: {correlation:.3f}")
     
-    # Visualize norm maps side-by-side
-    fig, axes = plt.subplots(2, 3, figsize=(15, 5))
-    im0 = axes[0][0].imshow(rgb_norms.reshape(h, w), cmap='viridis')
-    axes[0][0].set_title('RGB Feature Norms')
-    fig.colorbar(im0, ax=axes[0][0], label='RGB Norms')
-    im1 = axes[0][1].imshow(thermal_norms.reshape(h, w), cmap='viridis')
-    axes[0][1].set_title('Thermal Feature Norms')
-    fig.colorbar(im1, ax=axes[0][1], label='Thermal Norms')
-    im2 = axes[0][2].imshow(np.abs(rgb_norms - thermal_norms).reshape(h, w), cmap='hot')
-    axes[0][2].set_title('Absolute Norm Difference')
-    fig.colorbar(im2, ax=axes[0][2], label='RGB-Thermal Norm Difference')
+    fig, axes = plt.subplots(3, 3, figsize=(15, 5))
+    # Original images
+    axes[0][0].imshow(rgb_img)
+    axes[0][0].set_title("RGB Img")
+    axes[0][1].imshow(thermal_img)
+    axes[0][1].set_title("Thermal Img")
     # PCA images
     axes[1][0].imshow(rgb_pca_img)
     axes[1][0].set_title("RGB PCA Img")
     axes[1][1].imshow(thermal_pca_img)
     axes[1][1].set_title("Thermal PCA Img")
+    # Visualize norm maps side-by-side
+    im0 = axes[2][0].imshow(rgb_norms.reshape(h, w), cmap='viridis')
+    axes[2][0].set_title('RGB Feature Norms')
+    fig.colorbar(im0, ax=axes[2][0], label='RGB Norms')
+    im1 = axes[2][1].imshow(thermal_norms.reshape(h, w), cmap='viridis')
+    axes[2][1].set_title('Thermal Feature Norms')
+    fig.colorbar(im1, ax=axes[2][1], label='Thermal Norms')
+    im2 = axes[2][2].imshow(np.abs(rgb_norms - thermal_norms).reshape(h, w), cmap='hot')
+    axes[2][2].set_title('RGB-Thermal Norm Difference')
+    fig.colorbar(im2, ax=axes[2][2], label='RGB-Thermal Norm Difference')
+
     for ax in axes.flat:
         ax.axis('off')
     plt.show()
 
-def procrustes_analysis(pca, rgb_feat_img, thermal_feat_img):
+def compute_reconstruction_error(pca, rgb_feat_img, thermal_feat_img):
     # Apply PCA
-    rgb_feats_proj = apply_pca(rgb_feat_img, pca).cpu().numpy()
-    thermal_feats_proj = apply_pca(thermal_feat_img, pca).cpu().numpy()
+    rgb_feats_proj = apply_pca(rgb_feat_img, pca)
+    thermal_feats_proj = apply_pca(thermal_feat_img, pca)
 
-    # Compute rotation
-    mtx1, mt2, disparity = procrustes(rgb_feats_proj, thermal_feats_proj)
+    # Reconstruct original data
+    rgb_feats_reconstruct = rgb_feats_proj @ pca['V'].cuda().T
+    thermal_feats_reconstruct = thermal_feats_proj @ pca['V'].cuda().T
 
-    print(f"Disparity: {disparity}")
+    # Compute reconstruction error as norm of original vs reconstructed data
+    norm_rgb_feats_orig = get_normalized_image_feats(rgb_feat_img)
+    norm_thermal_feats_orig = get_normalized_image_feats(thermal_feat_img)
+
+    reconstruction_error_rgb = torch.linalg.norm(rgb_feats_reconstruct - norm_rgb_feats_orig)
+    reconstruction_error_thermal = torch.linalg.norm(thermal_feats_reconstruct - norm_thermal_feats_orig)
+
+    print(f"RGB error: {reconstruction_error_rgb} thermal error: {reconstruction_error_thermal}")
+
+def verify_img_pipeline(args, rgb_img_proc_fp, rgb_intrinsics_dir, thermal_img_proc_fp, thermal_intrinsics):
+    rgb_image_dir = os.path.join(args.run_dir, 'rgb_image')
+    rgb_pipeline = get_image_proc_pipeline(rgb_img_proc_fp)
+    rgb_feat_img, _ = run_pipeline(rgb_pipeline, 'rgb', rgb_image_dir, 10, rgb_intrinsics_dir)
+    rgb_feat_img = rgb_feat_img.squeeze(0).permute(1, 2, 0)
+    plt.imshow(rgb_feat_img[:, :, :3].cpu().numpy())
+    plt.show()
+
+    thermal_image_dir = os.path.join(args.run_dir, 'thermal_left_processed')
+    thermal_pipeline = get_image_proc_pipeline(thermal_img_proc_fp)
+    thermal_feat_img, _ = run_pipeline(thermal_pipeline, 'thermal', thermal_image_dir, 10, thermal_intrinsics)
+    thermal_feat_img = thermal_feat_img.squeeze(0).permute(1, 2, 0)
+    plt.imshow(thermal_feat_img[:, :, :3].cpu().numpy())
+    plt.show()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -195,16 +232,25 @@ if __name__ == '__main__':
     thermal_intrinsics = np.array([[412.42744452, 0.0, 313.38643993,0.0, 412.60673097, 249.37501763, 0.0, 0.0, 1.0]])
 
     # Compute feature buffers for rgb/thermal feature images
-    # compute_feature_buffers(rgb_img_proc_fp, thermal_img_proc_fp)
+    # compute_feature_buffers(args, rgb_img_proc_fp, thermal_img_proc_fp)
 
-    rgb_buffer_fp = '/home/tartandriver/workspace/img_feat_descs/dinov2s/loftup_dinov2s_gray_rgb_224x224_feats.npy'
-    thermal_buffer_fp = '/home/tartandriver/workspace/img_feat_descs/dinov2s/loftup_dinov2s_thermal_224x224_feats.npy'
-    rgb_pca_fp = '/home/tartandriver/tartandriver_ws/models/physics_atv_visual_mapping/pca/pca_loftup_dinov2s_gray_rgb_comp.pt'
-    thermal_pca_fp = '/home/tartandriver/tartandriver_ws/models/physics_atv_visual_mapping/pca/pca_loftup_dinov2s_thermal_comp.pt'
-    combined_pca_fp = '/home/tartandriver/tartandriver_ws/models/physics_atv_visual_mapping/pca/pca_loftup_dinov2s_combined_comp.pt'
+    # 09/17 bag - 3692 frames, feature buffer from first 1840 frames
+    # rgb_buffer_fp = '/home/tartandriver/workspace/feat_img_ablations/dinov2s/0917_bag/loftup_dinov2s_gray_rgb_224x224_feats.npy'
+    # thermal_buffer_fp = '/home/tartandriver/workspace/feat_img_ablations/dinov2s/0917_bag/loftup_dinov2s_thermal_224x224_feats.npy'
+    # rgb_pca_fp = '/home/tartandriver/workspace/feat_img_ablations/dinov2s/0917_bag/pca_loftup_dinov2s_gray_rgb_comp.pt'
+    # thermal_pca_fp = '/home/tartandriver/workspace/feat_img_ablations/dinov2s/0917_bag/pca_loftup_dinov2s_thermal_comp.pt'
+    # combined_pca_fp = '/home/tartandriver/workspace/feat_img_ablations/dinov2s/0917_bag/pca_loftup_dinov2s_combined_comp.pt'
+
+    # 11/06 bag - 5657 frames, feature buffer from first 2830 frames
+    rgb_buffer_fp = '/home/tartandriver/workspace/feat_img_ablations/dinov2s/1106_0_mac_salon_day_rgb/loftup_dinov2s_gray_rgb_224x224_feats.npy'
+    thermal_buffer_fp = '/home/tartandriver/workspace/feat_img_ablations/dinov2s/1106_0_mac_salon_day_rgb/loftup_dinov2s_thermal_224x224_feats.npy'
+    rgb_pca_fp = '/home/tartandriver/workspace/feat_img_ablations/dinov2s/1106_0_mac_salon_day_rgb/pca_loftup_dinov2s_gray_rgb_comp.pt'
+    thermal_pca_fp = '/home/tartandriver/workspace/feat_img_ablations/dinov2s/1106_0_mac_salon_day_rgb/pca_loftup_dinov2s_thermal_comp.pt'
+    combined_pca_fp = '/home/tartandriver/workspace/feat_img_ablations/dinov2s/1106_0_mac_salon_day_rgb/pca_loftup_dinov2s_combined_comp.pt'
+    
 
     # Compute rgb, thermal and combined feature pcas based on rgb/thermal feature buffers
-    # compute_pcas(rgb_buffer_fp, rgb_pca_fp, thermal_buffer_fp, thermal_pca_out_fp, combined_pca_fp)
+    # compute_pcas(args, rgb_buffer_fp, rgb_pca_fp, thermal_buffer_fp, thermal_pca_fp, combined_pca_fp)
 
     # Load PCAs
     rgb_pca = torch.load(rgb_pca_fp, weights_only=False)
@@ -218,8 +264,9 @@ if __name__ == '__main__':
     rgb_image_dir = os.path.join(args.run_dir, 'rgb_image')
     thermal_image_dir = os.path.join(args.run_dir, 'thermal_left_processed')
 
-    rgb_feat_img, _ = run_pipeline(rgb_pipeline, 'rgb', rgb_image_dir, 10, rgb_intrinsics_dir)
-    thermal_feat_img, _ = run_pipeline(thermal_pipeline, 'thermal', thermal_image_dir, 10, thermal_intrinsics)
+    frame_idx = 1496
+    rgb_feat_img, _ = run_pipeline(rgb_pipeline, 'rgb', rgb_image_dir, frame_idx, rgb_intrinsics_dir)
+    thermal_feat_img, _ = run_pipeline(thermal_pipeline, 'thermal', thermal_image_dir, frame_idx, thermal_intrinsics)
 
     rgb_pca_feats = apply_pca(rgb_feat_img, combined_pca)
     thermal_pca_feats = apply_pca(thermal_feat_img, combined_pca)
@@ -227,7 +274,14 @@ if __name__ == '__main__':
     # Compare Feature Norms
     h = 224
     w = 224
-    compare_feature_norms(rgb_pca_feats, thermal_pca_feats, h, w)
+    rgb_img = get_rgb_img_for_frame(rgb_image_dir, frame_idx)
+    thermal_img = get_thermal_img_for_frame(thermal_image_dir, frame_idx)
+    compare_feature_norms(rgb_img, thermal_img, rgb_pca_feats, thermal_pca_feats, h, w)
 
-    # Compute rotation matrices
-    procrustes_analysis(combined_pca, rgb_feat_img, thermal_feat_img)
+    # Compute reconstruction errors
+    compute_reconstruction_error(rgb_pca, rgb_feat_img, thermal_feat_img)
+    compute_reconstruction_error(thermal_pca, rgb_feat_img, thermal_feat_img)
+    compute_reconstruction_error(combined_pca, rgb_feat_img, thermal_feat_img)
+
+    # Verifying img pipeline
+    # verify_img_pipeline(args, rgb_img_proc_fp, rgb_intrinsics_dir, thermal_img_proc_fp, thermal_intrinsics)

@@ -145,7 +145,7 @@ def compute_feature_norms(features):
     norms = torch.norm(features, p=2, dim=-1)
     return norms.cpu().numpy()
 
-def compare_feature_norms(rgb_img, thermal_img, rgb_features, thermal_features, h, w):
+def compare_feature_norms(rgb_img, thermal_img, rgb_features, thermal_features, h, w, with_diff=True):
     rgb_norms = compute_feature_norms(rgb_features)
     thermal_norms = compute_feature_norms(thermal_features)
 
@@ -161,33 +161,67 @@ def compare_feature_norms(rgb_img, thermal_img, rgb_features, thermal_features, 
     correlation = np.corrcoef(rgb_norms.flatten(), thermal_norms.flatten())[0,1]
     print(f"Spatial norm correlation: {correlation:.3f}")
     
-    fig, axes = plt.subplots(3, 3, figsize=(15, 5))
-    # Original images
-    axes[0][0].imshow(rgb_img)
-    axes[0][0].set_title("RGB Img")
-    axes[0][1].imshow(thermal_img)
-    axes[0][1].set_title("Thermal Img")
-    # PCA images
-    axes[1][0].imshow(rgb_pca_img)
-    axes[1][0].set_title("RGB PCA Img")
-    axes[1][1].imshow(thermal_pca_img)
-    axes[1][1].set_title("Thermal PCA Img")
-    # Visualize norm maps side-by-side
-    im0 = axes[2][0].imshow(rgb_norms.reshape(h, w), cmap='viridis')
-    axes[2][0].set_title('RGB Feature Norms')
-    fig.colorbar(im0, ax=axes[2][0], label='RGB Norms')
-    im1 = axes[2][1].imshow(thermal_norms.reshape(h, w), cmap='viridis')
-    axes[2][1].set_title('Thermal Feature Norms')
-    fig.colorbar(im1, ax=axes[2][1], label='Thermal Norms')
-    im2 = axes[2][2].imshow(np.abs(rgb_norms - thermal_norms).reshape(h, w), cmap='hot')
-    axes[2][2].set_title('RGB-Thermal Norm Difference')
-    fig.colorbar(im2, ax=axes[2][2], label='RGB-Thermal Norm Difference')
+    fig = plt.figure(figsize=(16,10))
 
-    for ax in axes.flat:
-        ax.axis('off')
+    if with_diff:
+        ncols = 3
+    else:
+        ncols = 2
+
+    # Common viz code
+    nrows = 3
+
+    gs = fig.add_gridspec(
+        nrows, 3 * ncols,
+        width_ratios=[1, 0.06, 0.5] * ncols
+    )
+
+    axs = [[fig.add_subplot(gs[i, 3*j]) for j in range(ncols)]
+       for i in range(nrows)]
+
+    cax = [fig.add_subplot(gs[-1, 3*j + 1]) for j in range(ncols)]
+
+    images = [
+        [rgb_img, thermal_img, None],
+        [rgb_pca_img, thermal_pca_img,  None],
+        [rgb_norms.reshape(h, w), thermal_norms.reshape(h, w), 
+            np.abs(rgb_norms - thermal_norms).reshape(h, w)]
+    ]
+
+    image_labs = [
+        ['RGB Img', 'Thermal Img', None],
+        ['RGB PCA Img', 'Thermal PCA Img', None],
+        ['RGB Feature Norms', 'Thermal Feature Norms',
+            'RGB-Thermal Norm Difference']
+    ]
+
+    cbar_labs = [
+        'RGB Feature Norms',
+        'Thermal Feature Norms',
+        'RGB-Thermal Norm Difference'
+    ]
+
+    for i in range(nrows):
+        for j in range(ncols):
+            if images[i][j] is not None:
+                im = axs[i][j].imshow(images[i][j], aspect='equal')
+                axs[i][j].set_title(image_labs[i][j])
+                if i == nrows - 1:
+                    fig.colorbar(im, cax=cax[j], label=cbar_labs[j])
+            axs[i][j].axis('off')
+
     plt.show()
 
-def compute_reconstruction_error(pca, rgb_feat_img, thermal_feat_img):
+    # fig_dir = "/home/tartandriver/workspace/feat_img_pca_viz/"
+    # fig_file = "feature_norms_1496_no_norm_diff.png"
+    # plt.savefig(
+    #     os.path.join(fig_dir, fig_file),
+    #     dpi=300,
+    #     bbox_inches="tight",
+    #     pad_inches=0.02
+    # )
+
+def compute_reconstruction_error(pca, rgb_feat_img, thermal_feat_img, pca_type):
     # Apply PCA
     rgb_feats_proj = apply_pca(rgb_feat_img, pca)
     thermal_feats_proj = apply_pca(thermal_feat_img, pca)
@@ -203,7 +237,7 @@ def compute_reconstruction_error(pca, rgb_feat_img, thermal_feat_img):
     reconstruction_error_rgb = torch.linalg.norm(rgb_feats_reconstruct - norm_rgb_feats_orig)
     reconstruction_error_thermal = torch.linalg.norm(thermal_feats_reconstruct - norm_thermal_feats_orig)
 
-    print(f"RGB error: {reconstruction_error_rgb} thermal error: {reconstruction_error_thermal}")
+    print(f"With {pca_type} - RGB error: {reconstruction_error_rgb} thermal error: {reconstruction_error_thermal}")
 
 def verify_img_pipeline(args, rgb_img_proc_fp, rgb_intrinsics_dir, thermal_img_proc_fp, thermal_intrinsics):
     rgb_image_dir = os.path.join(args.run_dir, 'rgb_image')
@@ -276,12 +310,12 @@ if __name__ == '__main__':
     w = 224
     rgb_img = get_rgb_img_for_frame(rgb_image_dir, frame_idx)
     thermal_img = get_thermal_img_for_frame(thermal_image_dir, frame_idx)
-    compare_feature_norms(rgb_img, thermal_img, rgb_pca_feats, thermal_pca_feats, h, w)
+    compare_feature_norms(rgb_img, thermal_img, rgb_pca_feats, thermal_pca_feats, h, w, with_diff=False)
 
     # Compute reconstruction errors
-    compute_reconstruction_error(rgb_pca, rgb_feat_img, thermal_feat_img)
-    compute_reconstruction_error(thermal_pca, rgb_feat_img, thermal_feat_img)
-    compute_reconstruction_error(combined_pca, rgb_feat_img, thermal_feat_img)
+    compute_reconstruction_error(rgb_pca, rgb_feat_img, thermal_feat_img, "RGB PCA")
+    compute_reconstruction_error(thermal_pca, rgb_feat_img, thermal_feat_img, "Thermal PCA")
+    compute_reconstruction_error(combined_pca, rgb_feat_img, thermal_feat_img, "Combined PCA")
 
     # Verifying img pipeline
     # verify_img_pipeline(args, rgb_img_proc_fp, rgb_intrinsics_dir, thermal_img_proc_fp, thermal_intrinsics)

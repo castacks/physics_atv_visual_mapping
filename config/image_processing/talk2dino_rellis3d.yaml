@@ -1,0 +1,7 @@
+-
+    type: talk2dino_seg
+    args:
+        ontology: !include /home/tartandriver/tartandriver_ws/src/perception/physics_atv_visual_mapping/config/vfm_segmentation/rellis3d_ontology.yaml
+        image_insize: [128, 224]
+        sharpness: 20.
+        return_logits: true

@@ -542,6 +542,41 @@ class VoxelGrid:
 
         self.metadata.origin += px_shift * self.metadata.resolution
 
+    def replace_features(self, new_fks, new_features):
+        """
+        Make a COPY of the voxel grid with new features/keys
+
+        Args:
+            new_fks: The new FeatureKeyList
+            features: [PxN] tensor of the new features. Note that P needs to match current num features
+                            and N must match feature key length
+        Returns:
+            voxel_grid_new: a copy of this voxel grid with new features
+        """
+        assert len(new_fks) == new_features.shape[1]
+        assert self.features.shape[0] == new_features.shape[0]
+
+        new_voxel_grid = VoxelGrid(
+            metadata = LocalMapperMetadata(
+                origin = self.metadata.origin,
+                length = self.metadata.length,
+                resolution = self.metadata.resolution,
+                device = self.device
+            ),
+            feature_keys = new_fks,
+            device = self.device
+        )
+
+        new_voxel_grid.raster_indices = self.raster_indices.clone()
+        new_voxel_grid.feature_mask = self.feature_mask.clone()
+        new_voxel_grid.hits = self.hits.clone()
+        new_voxel_grid.misses = self.misses.clone()
+        new_voxel_grid.min_coords = self.min_coords.clone()
+        new_voxel_grid.max_coords = self.max_coords.clone()
+
+        new_voxel_grid.features = new_features
+        return new_voxel_grid
+
     def pts_in_bounds(self, pts):
         """Check if points are in bounds
 
@@ -696,7 +731,14 @@ class VoxelGrid:
             pts = self.grid_indices_to_pts(
                 self.raster_indices_to_grid_indices(self.feature_raster_indices)
             )
-        colors = normalize_dino(self.features[:, :3])
+
+        is_rgb = all([k in self.feature_keys.label for k in 'rgb'])
+
+        if is_rgb:
+            idxs = [self.feature_keys.index(k) for k in 'rgb']
+            colors = self.features[:, idxs]
+        else:
+            colors = normalize_dino(self.features[:, :3])
 
         #all_indices is a superset of indices
         if viz_all:

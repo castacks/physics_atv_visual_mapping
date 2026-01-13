@@ -13,7 +13,7 @@ from physics_atv_visual_mapping.image_processing.processing_blocks.pca_vlad impo
     PCAVLADBlock,
 )
 from physics_atv_visual_mapping.image_processing.processing_blocks.radio_lang import RadioLangBlock
-# from physics_atv_visual_mapping.image_processing.processing_blocks.ganav import GANavBlock
+from physics_atv_visual_mapping.image_processing.processing_blocks.talk2dino_seg import Talk2DinoSegBlock
 from physics_atv_visual_mapping.image_processing.processing_blocks.traversability_prototypes import TraversabilityPrototypesBlock
 from physics_atv_visual_mapping.image_processing.processing_blocks.loftup import LoftUpBlock
 # from physics_atv_visual_mapping.image_processing.processing_blocks.jafar import JafarBlock
@@ -45,6 +45,8 @@ def setup_image_pipeline(config):
             )
         elif btype == "radio_lang":
             block = RadioLangBlock(**block_config["args"], models_dir=config["models_dir"])
+        elif btype == "talk2dino_seg":
+            block = Talk2DinoSegBlock(**block_config["args"], models_dir=config["models_dir"])
         elif btype == "loftup":
             block = LoftUpBlock(**block_config["args"], models_dir=config["models_dir"])
         elif btype == "jafar":

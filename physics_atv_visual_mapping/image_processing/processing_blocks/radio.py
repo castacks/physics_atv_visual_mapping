@@ -76,7 +76,6 @@ class RadioBlock(ImageProcessingBlock):
     @property
     def output_feature_keys(self):
         # self.radio.n_output_channels
-        import pdb; pdb.set_trace()
         return FeatureKeyList(
             label=[f"radio_{i}" for i in range(self.radio.embed_dim)],
             metainfo=["vfm" for i in range(self.radio.embed_dim)]

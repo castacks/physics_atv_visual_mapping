@@ -9,7 +9,7 @@ class Slope(TerrainEstimationBlock):
     """
     Compute a per-cell min and max height
     """
-    def __init__(self, voxel_metadata, voxel_feature_keys, input_layer, mask_layer, radius, kernel_type, max_slope=1e10, device='cpu'):
+    def __init__(self, voxel_metadata, voxel_feature_keys, input_layer, radius, kernel_type, mask_layer=None, max_slope=1e10, device='cpu'):
         assert kernel_type in ['sobel', 'scharr']
 
         super().__init__(voxel_metadata, voxel_feature_keys, device)
@@ -45,7 +45,7 @@ class Slope(TerrainEstimationBlock):
     @property
     def output_feature_keys(self):
         return FeatureKeyList(
-            label = ["slope_x", "slope_y", "slope"],
+            label = ["slope_x", "slope_y", "slope_magnitude"],
             metainfo = ["terrain_estimation"] * 3
         )
 
@@ -53,11 +53,13 @@ class Slope(TerrainEstimationBlock):
         terrain_idx = bev_grid.feature_keys.index(self.input_layer)
         terrain_data = bev_grid.data[..., terrain_idx].clone()
 
-        mask_idx = bev_grid.feature_keys.index(self.mask_layer)
-        mask = bev_grid.data[..., mask_idx] > 1e-4
-
         #only take slopes if all convolved elements valid
-        valid_mask = apply_kernel(kernel=self.box, data=mask.float()) > 0.9999
+        if self.mask_layer is None:
+            valid_mask = torch.ones(*bev_grid.metadata.N, dtype=torch.bool, device=self.device)
+        else:
+            mask_idx = bev_grid.feature_keys.index(self.mask_layer)
+            mask = bev_grid.data[..., mask_idx] > 1e-4
+            valid_mask = apply_kernel(kernel=self.box, data=mask.float()) > 0.9999
 
         #correct by resolution to get slope as m/m instead of m/cell
         slope_x = apply_kernel(kernel=self.gradient_x, data=terrain_data) / bev_grid.metadata.resolution[0]

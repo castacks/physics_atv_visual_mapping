@@ -1,0 +1,15 @@
+- 
+    type: slope
+    args:
+        input_layer: terrain
+        # mask_layer: min_elevation_filtered_inflated_mask
+        radius: 0.25
+        max_slope: 2.0
+        kernel_type: scharr
+
+-
+    type: normals_sobel
+    args:
+        slope_x_layer: slope_x
+        slope_y_layer: slope_y
+        # mask_layer: min_elevation_filtered_inflated_mask

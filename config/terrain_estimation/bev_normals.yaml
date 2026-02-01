@@ -1,7 +1,24 @@
 - 
+    type: mrf_terrain_estimation
+    args: 
+        input_layer: terrain
+        output_layer: terrain_smoothed
+
+        itrs: 5   #num updates
+        alpha: 10. #weight on the measurement update
+        beta: 1.  #weight on the neighbor update
+        lr: 0.05   #learning rate
+
+        kernel_params:
+            kernel_type: gaussian #one of {gaussian/box} the kernel type to use for inflation
+
+            kernel_radius: 1. #kernel radius in m
+            kernel_sharpness: 2. #sharpness of (Gaussian) kernel
+
+- 
     type: slope
     args:
-        input_layer: terrain
+        input_layer: terrain_smoothed
         # mask_layer: min_elevation_filtered_inflated_mask
         radius: 0.25
         max_slope: 2.0

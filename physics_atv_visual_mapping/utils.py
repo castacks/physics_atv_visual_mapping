@@ -24,6 +24,26 @@ def load_ontology(ontology):
 
     return res
 
+def random_palette(n):
+    """
+    Make a random palette with n colors
+
+    Implement Fibonacci lattice to get clean coverage w/o obvious regularity
+    https://extremelearning.com.au/how-to-evenly-distribute-points-on-a-sphere-more-effectively-than-the-canonical-fibonacci-lattice/
+    """
+    gr = (1 + 5**0.5)/2
+    i = torch.arange(n)
+    theta = 2 * PI * i / gr
+    phi = torch.arccos(1 - 2*(i)/n)
+
+    pts = torch.stack([
+        theta.cos() * phi.sin(),
+        theta.sin() * phi.sin(),
+        phi.cos()
+    ], dim=-1)
+
+    return (pts + 1) / 2.
+
 def apply_palette(x, palette, softmax=False):
     """
     Apply semantic segmentation palette to data x

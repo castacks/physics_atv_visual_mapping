@@ -96,6 +96,9 @@ class FeatureKeyList:
         idxs = [i for i,m in enumerate(self.metainfo) if m==k]
         return self[idxs]
     
+    def has_label(self, x):
+        return x in self.label
+    
     def dump(self):
         return [f"{label}, {meta}" for label, meta in zip(self.label, self.metainfo)]
     

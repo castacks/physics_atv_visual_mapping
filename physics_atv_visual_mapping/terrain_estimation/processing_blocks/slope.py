@@ -9,13 +9,14 @@ class Slope(TerrainEstimationBlock):
     """
     Compute a per-cell min and max height
     """
-    def __init__(self, voxel_metadata, voxel_feature_keys, input_layer, mask_layer, radius, kernel_type, max_slope=1e10, device='cpu'):
+    def __init__(self, voxel_metadata, voxel_feature_keys, input_layer, radius, kernel_type, mask_layer=None, max_slope=1e10, publish_slope_magnitude=True, device='cpu'):
         assert kernel_type in ['sobel', 'scharr']
 
         super().__init__(voxel_metadata, voxel_feature_keys, device)
         self.input_layer = input_layer
         self.mask_layer = mask_layer
         self.kernel_type = kernel_type
+        self.publish_slope_magnitude = publish_slope_magnitude
 
         #allow for optional cap of max slope to reduce noise/
         #be a better learning feature
@@ -44,20 +45,28 @@ class Slope(TerrainEstimationBlock):
 
     @property
     def output_feature_keys(self):
-        return FeatureKeyList(
-            label = ["slope_x", "slope_y", "slope"],
-            metainfo = ["terrain_estimation"] * 3
-        )
+        if self.publish_slope_magnitude:
+            return FeatureKeyList(
+                label = ["slope_x", "slope_y", "slope"],
+                metainfo = ["terrain_estimation"] * 3
+            )
+        else:
+            return FeatureKeyList(
+                label = ["slope_x", "slope_y"],
+                metainfo = ["terrain_estimation"] * 2
+            )
 
     def run(self, voxel_grid, bev_grid):
         terrain_idx = bev_grid.feature_keys.index(self.input_layer)
         terrain_data = bev_grid.data[..., terrain_idx].clone()
 
-        mask_idx = bev_grid.feature_keys.index(self.mask_layer)
-        mask = bev_grid.data[..., mask_idx] > 1e-4
-
         #only take slopes if all convolved elements valid
-        valid_mask = apply_kernel(kernel=self.box, data=mask.float()) > 0.9999
+        if self.mask_layer is None:
+            valid_mask = torch.ones(*bev_grid.metadata.N, dtype=torch.bool, device=self.device)
+        else:
+            mask_idx = bev_grid.feature_keys.index(self.mask_layer)
+            mask = bev_grid.data[..., mask_idx] > 1e-4
+            valid_mask = apply_kernel(kernel=self.box, data=mask.float()) > 0.9999
 
         #correct by resolution to get slope as m/m instead of m/cell
         slope_x = apply_kernel(kernel=self.gradient_x, data=terrain_data) / bev_grid.metadata.resolution[0]
@@ -74,7 +83,8 @@ class Slope(TerrainEstimationBlock):
         slope_y_idx = bev_grid.feature_keys.index(self.output_feature_keys.label[1])
         bev_grid.data[..., slope_y_idx] = slope_y
 
-        slope_idx = bev_grid.feature_keys.index(self.output_feature_keys.label[2])
-        bev_grid.data[..., slope_idx] = slope
+        if self.publish_slope_magnitude:
+            slope_idx = bev_grid.feature_keys.index(self.output_feature_keys.label[2])
+            bev_grid.data[..., slope_idx] = slope
 
         return bev_grid

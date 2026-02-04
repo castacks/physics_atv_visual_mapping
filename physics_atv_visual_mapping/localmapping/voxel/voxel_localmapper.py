@@ -77,6 +77,9 @@ class VoxelLocalMapper(LocalMapper):
         self.ema = ema
         self.assert_feat_match = True
 
+    def clear(self):
+        self.voxel_grid = VoxelGrid(self.metadata, self.feature_keys, self.device)
+
     def update_pose(self, pose: torch.Tensor):
         """
         Args:

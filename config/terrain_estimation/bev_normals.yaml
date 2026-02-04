@@ -23,6 +23,7 @@
         radius: 0.25
         max_slope: 2.0
         kernel_type: scharr
+        publish_slope_magnitude: false
 
 -
     type: normals_sobel

@@ -7,7 +7,7 @@ class TerrainNormalsGradient(TerrainEstimationBlock):
     """
     Compute terrain normals from slope values
     """
-    def __init__(self, voxel_metadata, voxel_feature_keys, slope_x_layer, slope_y_layer, mask_layer, device='cpu'):
+    def __init__(self, voxel_metadata, voxel_feature_keys, slope_x_layer, slope_y_layer, mask_layer=None, device='cpu'):
         super().__init__(voxel_metadata, voxel_feature_keys, device)
         self.slope_x_layer = slope_x_layer
         self.slope_y_layer = slope_y_layer
@@ -32,8 +32,11 @@ class TerrainNormalsGradient(TerrainEstimationBlock):
         slope_y_data = bev_grid.data[..., slope_y_idx].clone()
 
         # Index and apply a threshold to the mask layer to identify valid regions
-        mask_idx = bev_grid.feature_keys.index(self.mask_layer)
-        mask = bev_grid.data[..., mask_idx] > 1e-4
+        if self.mask_layer is None:
+            mask = torch.ones(*bev_grid.metadata.N, dtype=torch.bool, device=self.device)
+        else:
+            mask_idx = bev_grid.feature_keys.index(self.mask_layer)
+            mask = bev_grid.data[..., mask_idx] > 1e-4
 
         # Construct a unit vector in x-slope direction: (1, 0, dz/dx)
         ones_dim = torch.ones_like(slope_x_data)

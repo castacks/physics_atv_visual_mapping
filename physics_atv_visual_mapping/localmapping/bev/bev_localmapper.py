@@ -393,7 +393,36 @@ class BEVGrid:
     @property
     def known(self):
         return self.hits > 0
+    def replace_features(self, new_fks, new_data):
+        """
+        Make a COPY of the BEV grid with new features/keys
 
+        Args:
+            new_fks: The new FeatureKeyList
+            data: The new data
+        Returns:
+            voxel_grid_new: a copy of this voxel grid with new features
+        """
+        assert len(new_fks) == new_data.shape[2]
+        assert new_data.shape[0] == self.metadata.N[0]
+        assert new_data.shape[1] == self.metadata.N[1]
+
+        new_bev_grid = BEVGrid(
+            metadata = LocalMapperMetadata(
+                origin = self.metadata.origin,
+                length = self.metadata.length,
+                resolution = self.metadata.resolution,
+                device = self.device
+            ),
+            feature_keys = new_fks,
+            device = self.device
+        )
+        new_bev_grid.hits = self.hits.clone()
+        new_bev_grid.misses = self.misses.clone()
+
+        new_bev_grid.data = new_data
+        return new_bev_grid
+    
     def get_grid_idxs(self, pts):
         """
         Get indexes for positions given map metadata
@@ -525,8 +554,16 @@ class BEVGrid:
             self.metadata.origin[1].item() + self.metadata.length[1].item(),
         )
 
+        is_rgb = all([k in self.feature_keys.label for k in 'rgb'])
+
+        if is_rgb:
+            idxs = [self.feature_keys.index(k) for k in 'rgb']
+            colors = self.features[:, :, idxs]
+        else:
+            colors = normalize_dino(self.data[..., :3])
+
         axs[0].imshow(
-            normalize_dino(self.data[..., :3]).permute(1, 0, 2).cpu().numpy(),
+            colors.permute(1, 0, 2).cpu().numpy(),
             origin="lower",
             extent=extent,
         )

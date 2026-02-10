@@ -9,9 +9,10 @@ class MRFTerrainEstimation(TerrainEstimationBlock):
     """
     Compute a per-cell min and max height
     """
-    def __init__(self, voxel_metadata, voxel_feature_keys, input_layer, mask_layer, itrs, alpha, beta, lr, kernel_params, device):
+    def __init__(self, voxel_metadata, voxel_feature_keys, input_layer, itrs, alpha, beta, lr, kernel_params, mask_layer=None, output_layer='terrain', device='cpu'):
         super().__init__(voxel_metadata, voxel_feature_keys, device)
         self.input_layer = input_layer
+        self.output_layer = output_layer
         self.mask_layer = mask_layer
         self.itrs = itrs
         self.alpha = alpha
@@ -31,7 +32,7 @@ class MRFTerrainEstimation(TerrainEstimationBlock):
     @property
     def output_feature_keys(self):
         return FeatureKeyList(
-            label = ["terrain"],
+            label = [self.output_layer],
             metainfo = ["terrain_estimation"]
         )
 
@@ -39,8 +40,11 @@ class MRFTerrainEstimation(TerrainEstimationBlock):
         input_idx = bev_grid.feature_keys.index(self.input_layer)
         input_data = bev_grid.data[..., input_idx].clone()
 
-        mask_idx = bev_grid.feature_keys.index(self.mask_layer)
-        mask = bev_grid.data[..., mask_idx] > 1e-4
+        if self.mask_layer is None:
+            mask = torch.ones(*bev_grid.metadata.N, dtype=torch.bool, device=self.device)
+        else:
+            mask_idx = bev_grid.feature_keys.index(self.mask_layer)
+            mask = bev_grid.data[..., mask_idx] > 1e-4
 
         terrain_estimate = input_data.clone()
 

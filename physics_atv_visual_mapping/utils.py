@@ -8,8 +8,61 @@ import ros2_numpy
 from scipy.spatial.transform import Rotation
 
 """
-collection of common geometry operations on poses, points, etc
+collection of common utility fns
 """
+def load_ontology(ontology):
+    """
+    convert ontology from human-readable yaml
+    """
+    sorted_keys = sorted([int(k) for k in ontology.keys()])
+
+    res = {}
+    res['ids'] = sorted_keys
+    res['labels'] = [ontology[k]['id'] for k in sorted_keys]
+    res['prompts'] = [ontology[k]['prompt'] for k in sorted_keys]
+    res['palette'] = torch.tensor([ontology[k]['color'] for k in sorted_keys])
+
+    return res
+
+def random_palette(n):
+    """
+    Make a random palette with n colors
+
+    Implement Fibonacci lattice to get clean coverage w/o obvious regularity
+    https://extremelearning.com.au/how-to-evenly-distribute-points-on-a-sphere-more-effectively-than-the-canonical-fibonacci-lattice/
+    """
+    gr = (1 + 5**0.5)/2
+    i = torch.arange(n)
+    theta = 2 * PI * i / gr
+    phi = torch.arccos(1 - 2*(i)/n)
+
+    pts = torch.stack([
+        theta.cos() * phi.sin(),
+        theta.sin() * phi.sin(),
+        phi.cos()
+    ], dim=-1)
+
+    return (pts + 1) / 2.
+
+def apply_palette(x, palette, softmax=False):
+    """
+    Apply semantic segmentation palette to data x
+    Args:
+        x: [b1...bn x S] tensor
+        palette: [Sx3] tensor
+    Returns:
+        [b1...bn x 3] viz tensor
+    """
+    bdims = [1] * (len(x.shape)-1)
+
+    _x = x.unsqueeze(-1)
+
+    if softmax:
+        _x = _x.softmax(dim=-2)
+
+    _cs = palette.float().to(_x.device).reshape(*bdims, -1, 3)
+
+    return (_x * _cs).sum(dim=-2)
 
 DEG_2_RAD = PI/180.
 RAD_2_DEG = 180./PI

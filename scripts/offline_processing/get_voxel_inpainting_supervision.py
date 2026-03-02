@@ -94,8 +94,8 @@ def crop_voxel_grid(voxel_grid, metadata_new):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--run_dir', type=str, required=True, help='run dir to generate supervision for')
-    parser.add_argument('--voxel_dir', type=str, required=False, default='voxel_map')
-    parser.add_argument('--output_dir', type=str, required=False, default=None, help='dir to save to (default=<voxel_dir>_inpaint)')
+    parser.add_argument('--voxel_dir', type=str, required=False, default='mapping/voxel_map')
+    parser.add_argument('--output_dir', type=str, required=False, default='inpainting/voxel_map_inpaint', help='dir to save to (default=inpainting/voxel_map_inpaint)')
     parser.add_argument('--device', type=str, required=False, default='cuda')
     args = parser.parse_args()
 

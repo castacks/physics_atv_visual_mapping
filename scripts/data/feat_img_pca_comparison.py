@@ -204,7 +204,7 @@ def compare_feature_norms(rgb_img, thermal_img, rgb_features, thermal_features, 
     for i in range(nrows):
         for j in range(ncols):
             if images[i][j] is not None:
-                im = axs[i][j].imshow(images[i][j], aspect='equal')
+                im = axs[i][j].imshow(images[i][j], vmin=3, vmax=14, aspect='equal')
                 axs[i][j].set_title(image_labs[i][j])
                 if i == nrows - 1:
                     fig.colorbar(im, cax=cax[j], label=cbar_labs[j])

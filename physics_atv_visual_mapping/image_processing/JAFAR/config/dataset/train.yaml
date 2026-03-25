@@ -1,0 +1,4 @@
+# conf/dataset/train.yaml
+_target_: dataloader.ImageDataset
+root: ${dataroot}/train
+root_cache: null

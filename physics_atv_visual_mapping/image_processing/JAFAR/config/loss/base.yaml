@@ -1,0 +1,3 @@
+_target_: src.loss.Loss
+loss_type: cosine_mse
+dim: ${model.feature_dim}

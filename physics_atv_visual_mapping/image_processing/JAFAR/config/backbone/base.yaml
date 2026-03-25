@@ -1,0 +1,3 @@
+_target_: src.backbone.PretrainedViTWrapper
+name: vit_small_patch14_dinov2.lvd142m
+norm: True

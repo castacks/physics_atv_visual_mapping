@@ -1,0 +1,28 @@
+# conf/config.yaml
+defaults:
+  - model: jafar
+  - backbone: base
+  - optimizer: adamw
+  - loss: base
+  - dataset@train_dataset: train
+  - dataset@val_dataset: val
+  - dataloader@train_dataloader: train
+  - dataloader@val_dataloader: val
+
+
+# General parameters
+img_size: 448
+epochs: 1
+max_steps: 100_000
+project_root: ${hydra:runtime.cwd}
+dataroot: ${project_root}/data/imagenet
+
+bfloat16: True 
+ratio: random
+sanity: False
+
+# Hydra configuration
+hydra:
+  run:
+    dir: ./output/debug/${now:%Y-%m-%d}/${now:%H-%M-%S} 
+    

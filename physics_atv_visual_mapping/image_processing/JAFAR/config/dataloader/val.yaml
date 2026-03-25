@@ -1,0 +1,6 @@
+defaults:
+  - train  # Load default settings from train.yaml
+
+# Override specific parameters for validation
+dataset: ${dataset.val}
+batch_size: 16

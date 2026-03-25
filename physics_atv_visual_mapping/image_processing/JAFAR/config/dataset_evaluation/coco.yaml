@@ -1,0 +1,7 @@
+_target_: evaluation.dataset.coco.COCODataset
+root: "${project_root}/data/COCOStuff"
+split: "train"
+include_labels: True
+subset: null
+num_classes: 27
+tag: "coco"

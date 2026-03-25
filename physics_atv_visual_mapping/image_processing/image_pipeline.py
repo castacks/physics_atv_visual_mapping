@@ -16,7 +16,8 @@ from physics_atv_visual_mapping.image_processing.processing_blocks.radio_lang im
 from physics_atv_visual_mapping.image_processing.processing_blocks.talk2dino_seg import Talk2DinoSegBlock
 from physics_atv_visual_mapping.image_processing.processing_blocks.traversability_prototypes import TraversabilityPrototypesBlock
 from physics_atv_visual_mapping.image_processing.processing_blocks.loftup import LoftUpBlock
-# from physics_atv_visual_mapping.image_processing.processing_blocks.jafar import JafarBlock
+# from physics_atv_visual_mapping.image_processing.processing_blocks.vjepa import VJEPABlock
+from physics_atv_visual_mapping.image_processing.processing_blocks.jafar import JafarBlock
 
 from physics_atv_visual_mapping.utils import normalize_dino
 import os
@@ -49,6 +50,8 @@ def setup_image_pipeline(config):
             block = Talk2DinoSegBlock(**block_config["args"], models_dir=config["models_dir"])
         elif btype == "loftup":
             block = LoftUpBlock(**block_config["args"], models_dir=config["models_dir"])
+        # elif btype == "vjepa":
+            # block = VJEPABlock(**block_config["args"], models_dir=config["models_dir"])
         elif btype == "jafar":
             block = JafarBlock(**block_config["args"], models_dir=config["models_dir"])
         elif btype == "traversability_prototypes":

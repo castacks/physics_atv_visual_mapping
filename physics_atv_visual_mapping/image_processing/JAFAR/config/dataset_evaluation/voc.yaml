@@ -1,0 +1,9 @@
+_target_: evaluation.dataset.voc.VOCDataset
+
+root: "${project_root}/data/" 
+split: "train"              
+year: "2012"
+download: false             
+include_labels: true
+num_classes: 21             
+tag: "voc" 

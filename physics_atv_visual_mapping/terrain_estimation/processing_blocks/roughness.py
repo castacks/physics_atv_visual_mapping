@@ -40,7 +40,7 @@ class Roughness(TerrainEstimationBlock):
         valid_mask = bev_grid.data[..., mask_idx] > 1e-4
 
         input_data[~valid_mask] = 0.
-        input_data_sq = torch.pow(input_data,2)
+        input_data_sq = torch.pow(input_data, 2)
 
         sum_x = apply_kernel(kernel=self.kernel, data=input_data)      
         sum_x2 = apply_kernel(kernel=self.kernel, data=input_data_sq)  
@@ -48,10 +48,11 @@ class Roughness(TerrainEstimationBlock):
 
         roughness = torch.zeros_like(input_data)
 
-        E_x2 = sum_x2[valid_mask]/count[valid_mask]
-        E_x = sum_x[valid_mask]/count[valid_mask]
+        # var = E[x^2] - E[x]^2
+        E_x2 = sum_x2[valid_mask] / count[valid_mask]
+        E_x = sum_x[valid_mask] / count[valid_mask]
 
-        roughness[valid_mask] = torch.sqrt(E_x2 - (torch.pow(E_x,2)))
+        roughness[valid_mask] = torch.sqrt(E_x2 - (torch.pow(E_x, 2)))
 
         output_data_idx = bev_grid.feature_keys.index(self.output_feature_keys.label[0])
 

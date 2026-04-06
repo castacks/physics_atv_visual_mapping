@@ -184,6 +184,18 @@ class VoxelLocalMapper(LocalMapper):
         max_coords_buf[vg2_inv_idxs] = torch.maximum(max_coords_buf[vg2_inv_idxs], voxel_grid_new.max_coords)
         self.voxel_grid.max_coords = max_coords_buf
 
+        first_update_time_buf = 1e16 * torch.ones(unique_raster_idxs.shape[0], dtype=torch.double, device=self.voxel_grid.device)
+        first_update_time_buf[vg1_inv_idxs] = torch.minimum(first_update_time_buf[vg1_inv_idxs], self.voxel_grid.first_update_time)
+        first_update_time_buf[vg2_inv_idxs] = torch.minimum(first_update_time_buf[vg2_inv_idxs], voxel_grid_new.first_update_time)
+        self.voxel_grid.first_update_time = first_update_time_buf
+
+        last_update_time_buf = -1e16 * torch.ones(unique_raster_idxs.shape[0], dtype=torch.double, device=self.voxel_grid.device)
+        last_update_time_buf[vg1_inv_idxs] = torch.maximum(last_update_time_buf[vg1_inv_idxs], self.voxel_grid.last_update_time)
+        last_update_time_buf[vg2_inv_idxs] = torch.maximum(last_update_time_buf[vg2_inv_idxs], voxel_grid_new.last_update_time)
+        self.voxel_grid.last_update_time = last_update_time_buf
+
+        import pdb;pdb.set_trace()
+
         #compute passthrough rate
         passthrough_rate = self.voxel_grid.misses / (self.voxel_grid.hits + self.voxel_grid.misses)
 
@@ -215,6 +227,8 @@ class VoxelLocalMapper(LocalMapper):
         self.voxel_grid.misses = self.voxel_grid.misses[~cull_mask]
         self.voxel_grid.min_coords = self.voxel_grid.min_coords[~cull_mask]
         self.voxel_grid.max_coords = self.voxel_grid.max_coords[~cull_mask]
+        self.voxel_grid.first_update_time = self.voxel_grid.first_update_time[~cull_mask]
+        self.voxel_grid.last_update_time = self.voxel_grid.last_update_time[~cull_mask]
         self.voxel_grid.raster_indices = self.voxel_grid.raster_indices[~cull_mask]
 
         feat_cull_mask = cull_mask[self.voxel_grid.feature_mask]
@@ -464,6 +478,10 @@ class VoxelGrid:
             src=all_valid_pts, index=inv_idxs, dim_size=all_raster_idxs.shape[0], reduce="max", dim=0
         )
 
+        ## since we are deriving from the same pc, can just copy the stamp for every voxel
+        voxelgrid.first_update_time = feat_pc.stamp * torch.ones(all_raster_idxs.shape[0], dtype=torch.double, device=feat_pc.device)
+        voxelgrid.last_update_time = feat_pc.stamp * torch.ones(all_raster_idxs.shape[0], dtype=torch.double, device=feat_pc.device)
+
         return voxelgrid
 
     def __init__(self, metadata, feature_keys, device):
@@ -486,6 +504,10 @@ class VoxelGrid:
         #store min/max coords per voxel for more accurate reconstruction
         self.min_coords = torch.zeros(0, 3, dtype=torch.float, device=device)
         self.max_coords = torch.zeros(0, 3, dtype=torch.float, device=device)
+
+        #also store oldest/newest update time per voxel
+        self.first_update_time = -torch.ones(0, dtype=torch.double, device=device)
+        self.last_update_time = -torch.ones(0, dtype=torch.double, device=device)
 
         self.device = device
 
@@ -778,5 +800,7 @@ class VoxelGrid:
         self.misses = self.misses.to(device)
         self.min_coords = self.min_coords.to(device)
         self.max_coords = self.max_coords.to(device)
+        self.first_update_time = self.first_update_time.to(device)
+        self.last_update_time = self.last_update_time.to(device)
         return self
 

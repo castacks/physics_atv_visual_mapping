@@ -224,7 +224,7 @@ class VoxelLocalMapper(LocalMapper):
             porosity_pc.colors = o3d.utility.Vector3dVector(colors.cpu().numpy())
             o3d.visualization.draw_geometries([porosity_pc])
 
-        self.voxel_grid.prune(cull_mask)
+        self.voxel_grid.mask_inplace(~cull_mask)
 
     def _merge_voxel_features(self, vg1_feats, vg1_mask, vg2_feats, vg2_mask):
         """
@@ -617,7 +617,27 @@ class VoxelGrid:
         new_voxel_grid.features = new_features
         return new_voxel_grid
     
-    def prune(self, mask):
+    def mask_inplace(self, mask):
+        """Remove voxels with mask
+
+        Args:
+            mask: N mask of voxels to keep
+        """
+        assert mask.shape[0] == self.raster_indices.shape[0]
+
+        self.hits = self.hits[mask]
+        self.misses = self.misses[mask]
+        self.min_coords = self.min_coords[mask]
+        self.max_coords = self.max_coords[mask]
+        self.first_update_time = self.first_update_time[mask]
+        self.last_update_time = self.last_update_time[mask]
+        self.raster_indices = self.raster_indices[mask]
+
+        feat_mask = mask[self.feature_mask]
+        self.features = self.features[feat_mask]
+        self.feature_mask = self.feature_mask[mask]
+
+    def mask(self, mask):
         """Remove voxels with mask
 
         Args:
@@ -625,17 +645,31 @@ class VoxelGrid:
         """
         assert mask.shape[0] == self.raster_indices.shape[0]
 
-        self.hits = self.hits[~mask]
-        self.misses = self.misses[~mask]
-        self.min_coords = self.min_coords[~mask]
-        self.max_coords = self.max_coords[~mask]
-        self.first_update_time = self.first_update_time[~mask]
-        self.last_update_time = self.last_update_time[~mask]
-        self.raster_indices = self.raster_indices[~mask]
+        new_voxel_grid = VoxelGrid(
+            metadata = LocalMapperMetadata(
+                origin = self.metadata.origin,
+                length = self.metadata.length,
+                resolution = self.metadata.resolution,
+                device = self.device
+            ),
+            feature_keys = self.feature_keys,
+            device = self.device
+        )
+        
+        #masking makes a copy
+        new_voxel_grid.hits = self.hits[mask]
+        new_voxel_grid.misses = self.misses[mask]
+        new_voxel_grid.min_coords = self.min_coords[mask]
+        new_voxel_grid.max_coords = self.max_coords[mask]
+        new_voxel_grid.first_update_time = self.first_update_time[mask]
+        new_voxel_grid.last_update_time = self.last_update_time[mask]
+        new_voxel_grid.raster_indices = self.raster_indices[mask]
 
         feat_mask = mask[self.feature_mask]
-        self.features = self.features[~feat_mask]
-        self.feature_mask = self.feature_mask[~mask]
+        new_voxel_grid.features = self.features[feat_mask]
+        new_voxel_grid.feature_mask = self.feature_mask[mask]
+
+        return new_voxel_grid
 
     def pts_in_bounds(self, pts):
         """Check if points are in bounds
@@ -740,12 +774,17 @@ class VoxelGrid:
         hits = (10. * torch.rand(nvox, device=device)).long()
         misses = (10. * torch.rand(nvox, device=device)).long()
 
+        first_update_time = torch.rand(nvox, dtype=torch.double, device=device)
+        last_update_time = first_update_time + torch.rand(nvox, dtype=torch.double, device=device)
+
         voxel_grid = VoxelGrid(metadata, fks, device=device)
         voxel_grid.raster_indices = raster_idxs
         voxel_grid.feature_mask = mask
         voxel_grid.features = feats
         voxel_grid.hits = hits
         voxel_grid.misses = misses
+        voxel_grid.first_update_time = first_update_time
+        voxel_grid.last_update_time = last_update_time
 
         voxel_centers = voxel_grid.grid_indices_to_pts(voxel_grid.raster_indices_to_grid_indices(raster_idxs))
         voxel_grid.min_coords = voxel_centers - metadata.resolution/2.

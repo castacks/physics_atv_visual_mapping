@@ -174,6 +174,7 @@ class VoxelLocalMapper(LocalMapper):
         self.voxel_grid.hits = hit_buf
         self.voxel_grid.misses = miss_buf
 
+        ## update coords ## 
         min_coords_buf = 1e10 * torch.ones(unique_raster_idxs.shape[0], 3, device=self.voxel_grid.device)
         min_coords_buf[vg1_inv_idxs] = torch.minimum(min_coords_buf[vg1_inv_idxs], self.voxel_grid.min_coords)
         min_coords_buf[vg2_inv_idxs] = torch.minimum(min_coords_buf[vg2_inv_idxs], voxel_grid_new.min_coords)
@@ -184,12 +185,24 @@ class VoxelLocalMapper(LocalMapper):
         max_coords_buf[vg2_inv_idxs] = torch.maximum(max_coords_buf[vg2_inv_idxs], voxel_grid_new.max_coords)
         self.voxel_grid.max_coords = max_coords_buf
 
+        ## update ages ##
+
+        first_update_time_buf = 1e16 * torch.ones(unique_raster_idxs.shape[0], dtype=torch.double, device=self.voxel_grid.device)
+        first_update_time_buf[vg1_inv_idxs] = torch.minimum(first_update_time_buf[vg1_inv_idxs], self.voxel_grid.first_update_time)
+        first_update_time_buf[vg2_inv_idxs] = torch.minimum(first_update_time_buf[vg2_inv_idxs], voxel_grid_new.first_update_time)
+        self.voxel_grid.first_update_time = first_update_time_buf
+
+        last_update_time_buf = -1e16 * torch.ones(unique_raster_idxs.shape[0], dtype=torch.double, device=self.voxel_grid.device)
+        last_update_time_buf[vg1_inv_idxs] = torch.maximum(last_update_time_buf[vg1_inv_idxs], self.voxel_grid.last_update_time)
+        last_update_time_buf[vg2_inv_idxs] = torch.maximum(last_update_time_buf[vg2_inv_idxs], voxel_grid_new.last_update_time)
+        self.voxel_grid.last_update_time = last_update_time_buf
+
         #compute passthrough rate
         passthrough_rate = self.voxel_grid.misses / (self.voxel_grid.hits + self.voxel_grid.misses)
 
         cull_mask = passthrough_rate > 0.75
 
-        # print('culling {} voxels...'.format(cull_mask.sum()))
+        # print('culling {} voxels...'.format(cull_mask.sum()))s
 
         new_grid_idxs = self.voxel_grid.raster_indices_to_grid_indices(self.voxel_grid.raster_indices)
         new_grid_idxs_bev = new_grid_idxs[:, :2]
@@ -211,15 +224,7 @@ class VoxelLocalMapper(LocalMapper):
             porosity_pc.colors = o3d.utility.Vector3dVector(colors.cpu().numpy())
             o3d.visualization.draw_geometries([porosity_pc])
 
-        self.voxel_grid.hits = self.voxel_grid.hits[~cull_mask]
-        self.voxel_grid.misses = self.voxel_grid.misses[~cull_mask]
-        self.voxel_grid.min_coords = self.voxel_grid.min_coords[~cull_mask]
-        self.voxel_grid.max_coords = self.voxel_grid.max_coords[~cull_mask]
-        self.voxel_grid.raster_indices = self.voxel_grid.raster_indices[~cull_mask]
-
-        feat_cull_mask = cull_mask[self.voxel_grid.feature_mask]
-        self.voxel_grid.features = self.voxel_grid.features[~feat_cull_mask]
-        self.voxel_grid.feature_mask = self.voxel_grid.feature_mask[~cull_mask]
+        self.voxel_grid.mask_inplace(~cull_mask)
 
     def _merge_voxel_features(self, vg1_feats, vg1_mask, vg2_feats, vg2_mask):
         """
@@ -464,6 +469,10 @@ class VoxelGrid:
             src=all_valid_pts, index=inv_idxs, dim_size=all_raster_idxs.shape[0], reduce="max", dim=0
         )
 
+        ## since we are deriving from the same pc, can just copy the stamp for every voxel
+        voxelgrid.first_update_time = feat_pc.stamp * torch.ones(all_raster_idxs.shape[0], dtype=torch.double, device=feat_pc.device)
+        voxelgrid.last_update_time = feat_pc.stamp * torch.ones(all_raster_idxs.shape[0], dtype=torch.double, device=feat_pc.device)
+
         return voxelgrid
 
     def __init__(self, metadata, feature_keys, device):
@@ -487,7 +496,31 @@ class VoxelGrid:
         self.min_coords = torch.zeros(0, 3, dtype=torch.float, device=device)
         self.max_coords = torch.zeros(0, 3, dtype=torch.float, device=device)
 
+        #also store oldest/newest update time per voxel
+        self.first_update_time = -torch.ones(0, dtype=torch.double, device=device)
+        self.last_update_time = -torch.ones(0, dtype=torch.double, device=device)
+
         self.device = device
+
+    def assert_valid(self):
+        """
+        Check function for vg validity
+        """
+        n_voxels = self.raster_indices.shape[0]
+        n_feat_voxels = self.features.shape[0]
+
+        assert self.feature_mask.shape[0] == n_voxels
+        assert self.feature_mask.sum() == n_feat_voxels
+
+        assert self.hits.shape[0] == n_voxels
+        assert self.misses.shape[0] == n_voxels
+        assert self.min_coords.shape[0] == n_voxels
+        assert self.max_coords.shape[0] == n_voxels
+        assert self.first_update_time.shape[0] == n_voxels
+        assert self.last_update_time.shape[0] == n_voxels
+
+        assert ((self.max_coords - self.min_coords) >= 0).all()
+        assert ((self.last_update_time - self.first_update_time) >= 0).all()
 
     @property
     def non_feature_raster_indices(self):
@@ -542,6 +575,8 @@ class VoxelGrid:
         self.misses = self.misses[mask]
         self.min_coords = self.min_coords[mask]
         self.max_coords = self.max_coords[mask]
+        self.first_update_time = self.first_update_time[mask]
+        self.last_update_time = self.last_update_time[mask]
 
         self.metadata.origin += px_shift * self.metadata.resolution
 
@@ -576,8 +611,64 @@ class VoxelGrid:
         new_voxel_grid.misses = self.misses.clone()
         new_voxel_grid.min_coords = self.min_coords.clone()
         new_voxel_grid.max_coords = self.max_coords.clone()
+        new_voxel_grid.first_update_time = self.first_update_time.clone()
+        new_voxel_grid.last_update_time = self.last_update_time.clone()
 
         new_voxel_grid.features = new_features
+        return new_voxel_grid
+    
+    def mask_inplace(self, mask):
+        """Remove voxels with mask
+
+        Args:
+            mask: N mask of voxels to keep
+        """
+        assert mask.shape[0] == self.raster_indices.shape[0]
+
+        self.hits = self.hits[mask]
+        self.misses = self.misses[mask]
+        self.min_coords = self.min_coords[mask]
+        self.max_coords = self.max_coords[mask]
+        self.first_update_time = self.first_update_time[mask]
+        self.last_update_time = self.last_update_time[mask]
+        self.raster_indices = self.raster_indices[mask]
+
+        feat_mask = mask[self.feature_mask]
+        self.features = self.features[feat_mask]
+        self.feature_mask = self.feature_mask[mask]
+
+    def mask(self, mask):
+        """Remove voxels with mask
+
+        Args:
+            mask: N mask of voxels to prune
+        """
+        assert mask.shape[0] == self.raster_indices.shape[0]
+
+        new_voxel_grid = VoxelGrid(
+            metadata = LocalMapperMetadata(
+                origin = self.metadata.origin,
+                length = self.metadata.length,
+                resolution = self.metadata.resolution,
+                device = self.device
+            ),
+            feature_keys = self.feature_keys,
+            device = self.device
+        )
+        
+        #masking makes a copy
+        new_voxel_grid.hits = self.hits[mask]
+        new_voxel_grid.misses = self.misses[mask]
+        new_voxel_grid.min_coords = self.min_coords[mask]
+        new_voxel_grid.max_coords = self.max_coords[mask]
+        new_voxel_grid.first_update_time = self.first_update_time[mask]
+        new_voxel_grid.last_update_time = self.last_update_time[mask]
+        new_voxel_grid.raster_indices = self.raster_indices[mask]
+
+        feat_mask = mask[self.feature_mask]
+        new_voxel_grid.features = self.features[feat_mask]
+        new_voxel_grid.feature_mask = self.feature_mask[mask]
+
         return new_voxel_grid
 
     def pts_in_bounds(self, pts):
@@ -683,12 +774,17 @@ class VoxelGrid:
         hits = (10. * torch.rand(nvox, device=device)).long()
         misses = (10. * torch.rand(nvox, device=device)).long()
 
+        first_update_time = torch.rand(nvox, dtype=torch.double, device=device)
+        last_update_time = first_update_time + torch.rand(nvox, dtype=torch.double, device=device)
+
         voxel_grid = VoxelGrid(metadata, fks, device=device)
         voxel_grid.raster_indices = raster_idxs
         voxel_grid.feature_mask = mask
         voxel_grid.features = feats
         voxel_grid.hits = hits
         voxel_grid.misses = misses
+        voxel_grid.first_update_time = first_update_time
+        voxel_grid.last_update_time = last_update_time
 
         voxel_centers = voxel_grid.grid_indices_to_pts(voxel_grid.raster_indices_to_grid_indices(raster_idxs))
         voxel_grid.min_coords = voxel_centers - metadata.resolution/2.
@@ -778,5 +874,7 @@ class VoxelGrid:
         self.misses = self.misses.to(device)
         self.min_coords = self.min_coords.to(device)
         self.max_coords = self.max_coords.to(device)
+        self.first_update_time = self.first_update_time.to(device)
+        self.last_update_time = self.last_update_time.to(device)
         return self
 

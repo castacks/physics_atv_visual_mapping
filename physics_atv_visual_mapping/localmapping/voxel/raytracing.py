@@ -2,9 +2,7 @@
 import torch
 import torch_scatter
 
-from numpy import pi as PI
-
-from physics_atv_visual_mapping.utils import transform_points, DEG_2_RAD, RAD_2_DEG
+from physics_atv_visual_mapping.utils import transform_points, DEG_2_RAD
 
 class FrustumRaytracer:
     """
@@ -23,46 +21,73 @@ class FrustumRaytracer:
         self.device = device
 
     # def raytrace(self, pose, voxel_grid_meas, voxel_grid_agg):
-    def raytrace_but_better(self, pose, pc_meas, voxel_grid_agg):
+    def raytrace_but_better(self, pose, pc_meas, voxel_grid_agg, range_buffer=0.15, max_clear_range=25.0):
         """
         Actual raytracing interface
+        
+        For each ray direction (el/az bin), we find the max measured range.
+        Then for each aggregated voxel, if its range is LESS than the measured range
+        (plus a buffer for tolerance), it means the ray passed through that voxel,
+        indicating the voxel should be cleared (dynamic obstacle that moved).
+
+        Args:
+            pose: Robot pose [x, y, z, qx, qy, qz, qw]
+            pc_meas: Measured point cloud (FeaturePointCloudTorch)
+            voxel_grid_agg: Aggregated voxel grid to update
+            range_buffer: Buffer distance (m) subtracted from measured range for safer clearing
+            max_clear_range: Maximum range (m) to use for clearing when no measurement in bin.
 
         TODO: we're raycasting in global but the sensor is in local. Rotate the bins into local using pose
         """
-        # voxel_pts = voxel_grid_meas.grid_indices_to_pts(voxel_grid_meas.raster_indices_to_grid_indices(voxel_grid_meas.raster_indices))
-
-        # import pdb;pdb.set_trace()
+        # We only want to record measurements where we actually hit something.
         voxel_pts = pc_meas.pts
         voxel_el_az_range = get_el_az_range_from_xyz(pose, voxel_pts)
+        
+        # This remains strict. If a hit is OOB, we ignore it.
         voxel_maxdist_el_az_bins = bin_el_az_range(voxel_el_az_range, sensor_model=self.sensor_model, reduce='max')
 
-        voxel_from_el_az = get_xyz_from_el_az_range(pose, voxel_el_az_range)
+        # For bins with no measurement, assume the ray traveled to max_clear_range
+        voxel_maxdist_el_az_bins[voxel_maxdist_el_az_bins < 1e-6] = max_clear_range
 
+
+        # We check existing voxels against the measurement bins.
         agg_voxel_pts = voxel_grid_agg.grid_indices_to_pts(voxel_grid_agg.raster_indices_to_grid_indices(voxel_grid_agg.raster_indices))
         agg_voxel_el_az_range = get_el_az_range_from_xyz(pose, agg_voxel_pts)
-        agg_voxel_bin_idxs = get_el_az_range_bin_idxs(agg_voxel_el_az_range, sensor_model=self.sensor_model)
+        
+        # Extract sensor constants
+        sensor = self.sensor_model
+        n_az = sensor["az_bins"].shape[0] - 1
+        n_el = sensor["el_bins"].shape[0] - 1
+        
+        # Calculate raw indices for the AGGREGATED voxels
+        el_idxs = torch.bucketize(agg_voxel_el_az_range[:, 0], sensor["el_bins"]) - 1
+        az_idxs = torch.bucketize(agg_voxel_el_az_range[:, 1], sensor["az_bins"]) - 1
+        
+        # Clamp elevation to valid range [0, n_el-1]
+        # Any voxel above the FOV gets mapped to the top-most beam (n_el - 1)
+        # Any voxel below the FOV gets mapped to the bottom-most beam (0)
+        el_idxs_clamped = el_idxs.clamp(min=0, max=n_el - 1)
+        
+        # Compute raster indices using the clamped elevation
+        agg_voxel_bin_idxs = el_idxs_clamped * n_az + az_idxs
 
-        #bin idx == -1 iff. outside sensor fov
-        agg_voxel_valid_bin = (agg_voxel_bin_idxs >= 0)
-
-        #set to large negative to not filter on misses
-        # voxel_maxdist_el_az_bins[voxel_maxdist_el_az_bins < 1e-6] = -1e10
-
-        #set to lidar range to filter on misses
-        voxel_maxdist_el_az_bins[voxel_maxdist_el_az_bins < 1e-6] = 200.
-
-        el_az = torch.stack(torch.meshgrid(self.sensor_model["el_bins"][:-1], self.sensor_model["az_bins"][:-1], indexing='ij'), dim=-1)
-        voxel_maxdist_sph = torch.cat([el_az.view(-1, 2), voxel_maxdist_el_az_bins.view(-1, 1)], dim=-1)
-        voxel_maxdist_sph_hits = voxel_maxdist_sph[voxel_maxdist_sph[:, 2] > 1e-6]
-        voxel_maxdist_xyz_hits = get_xyz_from_el_az_range(pose, voxel_maxdist_sph_hits)
-
-        voxel_maxdist_sph_misses = voxel_maxdist_sph[voxel_maxdist_sph[:, 2] < 1e-6]
-        voxel_maxdist_sph_misses[:, 2] = 50.
-        voxel_maxdist_xyz_misses = get_xyz_from_el_az_range(pose, voxel_maxdist_sph_misses)
+        # Check for Azimuth validity only (Azimuth should wrap, but check OOB just in case)
+        az_oob = (az_idxs < 0) | (az_idxs >= n_az)
+        
+        # We consider the bin valid if Azimuth is good. 
+        # We intentionally ignore Elevation OOB because we clamped it.
+        agg_voxel_valid_bin = (~az_oob)
 
         agg_ranges = agg_voxel_el_az_range[:, 2]
-        query_ranges = voxel_maxdist_el_az_bins[agg_voxel_bin_idxs]
-        passthrough_mask = (query_ranges > agg_ranges) & agg_voxel_valid_bin
+        
+        # clamp indices to avoid negative indexing (which would access the last element)
+        agg_bin_idxs_clamped = agg_voxel_bin_idxs.clamp(min=0)
+        query_ranges = voxel_maxdist_el_az_bins[agg_bin_idxs_clamped]
+        
+        # A voxel is "passed through" if the ray traveled beyond it (measured range > voxel range)
+        # Subtract range_buffer from measured range to be more conservative about clearing
+        # This prevents clearing voxels right at the edge of a surface
+        passthrough_mask = ((query_ranges - range_buffer) > agg_ranges) & agg_voxel_valid_bin
 
         #dont increment hits, do that in the aggregate step
         voxel_grid_agg.misses += passthrough_mask.float()
@@ -88,7 +113,7 @@ class FrustumRaytracer:
         return
 
     def to(self, device):
-        self.device = self.device
+        self.device = device
         for k,v in self.sensor_model.items():
             self.sensor_model[k] = v.to(device)
         return self
@@ -142,6 +167,7 @@ def setup_sensor_model(sensor_config, device='cpu'):
             "az_bins": az_bins,
             "az_thresh": az_thresh,
         }
+
     elif sensor_config["type"] == "VLP32C-front":
         #from the spec sheet @ 600RPM (https://icave2.cse.buffalo.edu/resources/sensor-modeling/VLP32CManual.pdf)
         az_bins = DEG_2_RAD * torch.linspace(-90., 90., 451, dtype=torch.float, device=device)
@@ -166,6 +192,23 @@ def setup_sensor_model(sensor_config, device='cpu'):
             "az_bins": az_bins,
             "az_thresh": az_thresh,
         }
+
+    elif sensor_config["type"] == "OS1-128":
+        # OS1-128 has 1024 horizontal channels with 360° total horizontal FOV
+        az_bins = DEG_2_RAD * torch.linspace(-180., 180., 1025, dtype=torch.float, device=device)
+        az_thresh = (az_bins[1:] - az_bins[:-1]).min()
+
+        # OS1-128 has 128 vertical channels with 45° total vertical FOV (-22.5° to +22.5°)
+        el_bins = DEG_2_RAD * torch.linspace(-22.5, 22.5, 129, dtype=torch.float, device=device)
+        el_thresh = (el_bins[1:] - el_bins[:-1]).min()
+
+        return {
+            "el_bins": el_bins,
+            "el_thresh": el_thresh,
+            "az_bins": az_bins, 
+            "az_thresh": az_thresh,
+        }
+
     else:
         print("unsupported sensor model type {}".format(sensor_config["type"]))
         exit(1)
@@ -236,7 +279,8 @@ def get_el_az_range_from_xyz(pose, pts, apply_rotation=True):
     if apply_rotation:
         R = htm_from_quat(pose[3:7])
         #pts are in global, so apply inverse of R to transform to local
-        pts_to_pos_dx = transform_points(pts_to_pos_dx, torch.linalg.inv(R))
+        # R is a rotation matrix in 4x4 form (orthogonal), so inverse is transpose
+        pts_to_pos_dx = transform_points(pts_to_pos_dx, R.transpose(-1, -2))
 
     ranges = torch.linalg.norm(pts_to_pos_dx, dim=-1)
     ranges_2d = torch.linalg.norm(pts_to_pos_dx[..., :2], dim=-1)
@@ -268,10 +312,12 @@ def bin_el_az_range(el_az_range, sensor_model, reduce='max'):
     n_el = sensor_model["el_bins"].shape[0] - 1
     raster_idxs = get_el_az_range_bin_idxs(el_az_range, sensor_model)
 
-    valid_mask = (raster_idxs > 0)
+    valid_mask = (raster_idxs >= 0)
 
-    #placeholder of zero should be ok?
-    out = torch_scatter.scatter(src=el_az_range[..., 2][valid_mask], index=raster_idxs[valid_mask], dim_size=n_el*n_az, reduce=reduce)
+    # Initialize with -1.0 to represent "no measurement"
+    out = torch.full((n_el*n_az,), -1.0, device=el_az_range.device, dtype=el_az_range.dtype)
+    
+    torch_scatter.scatter(src=el_az_range[..., 2][valid_mask], index=raster_idxs[valid_mask], out=out, dim_size=n_el*n_az, reduce=reduce)
 
     return out
 
@@ -290,8 +336,14 @@ def get_el_az_range_bin_idxs(el_az_range, sensor_model):
     raster_idxs = el_idxs * n_az + az_idxs
 
     #compute and evaluate residual, as elems can fall outside bin edges
-    el_res = (el_az_range[:, 0] - sensor_model["el_bins"][el_idxs])
-    az_res = (el_az_range[:, 1] - sensor_model["az_bins"][az_idxs])
+    # Handle out-of-bounds indices safely
+    in_range = (el_idxs >= 0) & (el_idxs < n_el) & (az_idxs >= 0) & (az_idxs < n_az)
+    
+    el_res = torch.zeros_like(el_az_range[:, 0])
+    az_res = torch.zeros_like(el_az_range[:, 1])
+    
+    el_res[in_range] = (el_az_range[in_range, 0] - sensor_model["el_bins"][el_idxs[in_range]])
+    az_res[in_range] = (el_az_range[in_range, 1] - sensor_model["az_bins"][az_idxs[in_range]])
 
     el_invalid = (el_res < 0.) | (el_res > sensor_model["el_thresh"])
     az_invalid = (az_res < 0.) | (az_res > sensor_model["az_thresh"])

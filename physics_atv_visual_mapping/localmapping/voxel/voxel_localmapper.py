@@ -1,6 +1,5 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.cm as cm
 import open3d as o3d
 import torch
 import torch_scatter
@@ -12,8 +11,6 @@ from physics_atv_visual_mapping.feature_key_list import FeatureKeyList
 from physics_atv_visual_mapping.utils import *
 
 def hist(var):
-    import matplotlib.pyplot as plt
-    import numpy as np
 
     var_np = var.cpu().numpy()
     ncols = var_np.shape[1] if var_np.ndim > 1 else 1
@@ -63,7 +60,9 @@ def create_grid(size=10, step=1.0):
 class VoxelLocalMapper(LocalMapper):
     """Class for local mapping voxels"""
 
-    def __init__(self, metadata, feature_keys, ema, raytracer=None, n_features=-1, device='cpu'):
+    def __init__(self, metadata, feature_keys, ema, raytracer=None, n_features=-1, device='cpu',
+                 passthrough_thresh=0.4, hit_miss_decay=0.85, range_buffer=0.1,
+                 max_clear_range=25.0, max_hit_confidence=15.0, min_misses=3.0):
         super().__init__(metadata, device)
         assert metadata.ndims == 3, "VoxelLocalMapper requires 3d metadata"
         self.n_features = len(feature_keys) if n_features == -1 else n_features
@@ -76,6 +75,12 @@ class VoxelLocalMapper(LocalMapper):
         self.do_raytrace = self.raytracer is not None
         self.ema = ema
         self.assert_feat_match = True
+        self.passthrough_thresh = passthrough_thresh
+        self.hit_miss_decay = hit_miss_decay
+        self.range_buffer = range_buffer
+        self.max_clear_range = max_clear_range
+        self.max_hit_confidence = max_hit_confidence
+        self.min_misses = min_misses
 
     def clear(self):
         self.voxel_grid = VoxelGrid(self.metadata, self.feature_keys, self.device)
@@ -95,7 +100,7 @@ class VoxelLocalMapper(LocalMapper):
         self.voxel_grid.shift(px_shift)
         self.metadata.origin = new_origin
 
-    def add_feature_pc(self, pos: torch.Tensor, feat_pc: FeaturePointCloudTorch, do_raytrace=False, debug=False):
+    def add_feature_pc(self, pos: torch.Tensor, feat_pc: FeaturePointCloudTorch, debug=False):
         voxel_grid_new = VoxelGrid.from_feature_pc(feat_pc, self.metadata, self.n_features, pos, strategy='mindist')
 
         if self.assert_feat_match:
@@ -103,7 +108,9 @@ class VoxelLocalMapper(LocalMapper):
 
         if self.do_raytrace:
             # self.raytracer.raytrace(pos, voxel_grid_meas=voxel_grid_new, voxel_grid_agg=self.voxel_grid)
-            self.raytracer.raytrace_but_better(pos, pc_meas=feat_pc, voxel_grid_agg=self.voxel_grid)
+            self.raytracer.raytrace_but_better(pos, pc_meas=feat_pc, voxel_grid_agg=self.voxel_grid, 
+                                                range_buffer=self.range_buffer,
+                                                max_clear_range=self.max_clear_range)
 
         #first map all indices with features
         all_raster_idxs = torch.cat([self.voxel_grid.raster_indices, voxel_grid_new.raster_indices])
@@ -174,6 +181,13 @@ class VoxelLocalMapper(LocalMapper):
         self.voxel_grid.hits = hit_buf
         self.voxel_grid.misses = miss_buf
 
+        # Prevents "Infinite Mass" problem by capping the number of hits
+        self.voxel_grid.hits = torch.clamp(self.voxel_grid.hits, max=self.max_hit_confidence)
+
+        # Decaying misses only allows the map to "forgive" transient noise over time
+        if self.hit_miss_decay < 1.0:
+            self.voxel_grid.misses *= self.hit_miss_decay
+
         min_coords_buf = 1e10 * torch.ones(unique_raster_idxs.shape[0], 3, device=self.voxel_grid.device)
         min_coords_buf[vg1_inv_idxs] = torch.minimum(min_coords_buf[vg1_inv_idxs], self.voxel_grid.min_coords)
         min_coords_buf[vg2_inv_idxs] = torch.minimum(min_coords_buf[vg2_inv_idxs], voxel_grid_new.min_coords)
@@ -185,9 +199,13 @@ class VoxelLocalMapper(LocalMapper):
         self.voxel_grid.max_coords = max_coords_buf
 
         #compute passthrough rate
-        passthrough_rate = self.voxel_grid.misses / (self.voxel_grid.hits + self.voxel_grid.misses)
+        passthrough_rate = self.voxel_grid.misses / (self.voxel_grid.hits + self.voxel_grid.misses + 1e-8)
 
-        cull_mask = passthrough_rate > 0.75
+        # In order to remove a voxel:
+        # 1. Ratio must be bad (passthrough > threshold)
+        # 2. AND we must have seen enough misses to be sure it's gone (> min_misses)
+        # The min_misses check prevents a single lucky ray from deleting a voxel
+        cull_mask = (passthrough_rate > self.passthrough_thresh) & (self.voxel_grid.misses > self.min_misses)
 
         # print('culling {} voxels...'.format(cull_mask.sum()))
 
@@ -201,7 +219,6 @@ class VoxelLocalMapper(LocalMapper):
         cull_mask = cull_mask & ~bottom_voxel_mask
 
         if debug:
-            import open3d as o3d
             pts = self.voxel_grid.grid_indices_to_pts(self.voxel_grid.raster_indices_to_grid_indices(self.voxel_grid.raster_indices))
             #solid=black, porous=green, cull=red
             colors = torch.stack([torch.zeros_like(passthrough_rate), passthrough_rate, torch.zeros_like(passthrough_rate)], dim=-1)

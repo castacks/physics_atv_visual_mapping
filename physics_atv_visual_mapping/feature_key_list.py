@@ -45,6 +45,9 @@ class FeatureKeyList:
         """
         Make a simpler print that condenses similar keys
         """
+        if not self.label:
+            return "empty"
+
         out = ""
         prev_prefix = None
         prev_metainfo = None

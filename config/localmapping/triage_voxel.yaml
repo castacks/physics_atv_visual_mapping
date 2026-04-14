@@ -13,7 +13,7 @@ min_misses: 3.0          # Minimum number of misses required before a voxel can 
 metadata:
     origin: [-15., -15., -3.]
     length: [30., 30., 6.]
-    resolution: [0.2, 0.2, 0.05]
+    resolution: [0.1, 0.1, 0.05]
 
 raytracer:
     type: frustum

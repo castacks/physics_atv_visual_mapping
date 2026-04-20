@@ -23,13 +23,13 @@ from ros_torch_converter.datatypes.pointcloud import PointCloudTorch
 # rgb image frame
 # offset argument is used to set arbitrary starting frames (i.e., non-zero) in KITTI dataset
 def update_viz(frame_idx, offset, fig, args, sensors_dir, E_new, E_old, tf_manager, max_depth, im_objs, scat_objs, ax, save=False):
-    if frame_idx % 50 == 0:
+    if (frame_idx + offset) % 50 == 0:
         print(f"Frame {frame_idx + offset}")
 
     # Get data to vizualize
-    img = ImageTorch.from_kitti(os.path.join(sensors_dir, args.rgb_image_dir), frame_idx, device='cuda')
-    intrinsics = IntrinsicsTorch.from_kitti(os.path.join(sensors_dir, args.rgb_intrinsics_dir), frame_idx, device='cuda')
-    pc = PointCloudTorch.from_kitti(os.path.join(sensors_dir, args.pc_dir), frame_idx, device='cuda')
+    img = ImageTorch.from_kitti(os.path.join(sensors_dir, args.rgb_image_dir), frame_idx + offset, device='cuda')
+    intrinsics = IntrinsicsTorch.from_kitti(os.path.join(sensors_dir, args.rgb_intrinsics_dir), frame_idx + offset, device='cuda')
+    pc = PointCloudTorch.from_kitti(os.path.join(sensors_dir, args.pc_dir), frame_idx + offset, device='cuda')
 
     if pc.frame_id not in {"velodyne_1", "vehicle"}:
         # need to transform pc to vehicle frame first
@@ -122,9 +122,9 @@ def update_viz(frame_idx, offset, fig, args, sensors_dir, E_new, E_old, tf_manag
     ax[2].axis('off')
 
     if not save:
-        fig.canvas.manager.set_window_title(f"Frame: {frame_idx}")
+        fig.canvas.manager.set_window_title(f"Frame: {frame_idx + offset}")
     else:
-        fig.suptitle(f"Frame: {frame_idx}")
+        fig.suptitle(f"Frame: {frame_idx + offset}")
     
     return im_objs + scat_objs
 

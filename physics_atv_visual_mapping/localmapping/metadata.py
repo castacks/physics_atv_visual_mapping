@@ -19,7 +19,7 @@ class LocalMapperMetadata:
             else torch.tensor(resolution, device=device)
         )
         self.N = torch.round(self.length / self.resolution).long()
-        self.ndims = self.origin.shape[0]
+        self.ndims = self.origin.shape[-1]
         self.device = device
 
     def get_coords(self):
@@ -95,8 +95,43 @@ class LocalMapperMetadata:
         """
         res = []
         for i in range(self.ndims):
-            res.extend([self.origin[i].item(), self.origin[i].item() + self.length[i].item()])
+            res.extend([self.origin[...,i].item(), self.origin[...,i].item() + self.length[...,i].item()])
         return res
+
+    def world_to_grid(self, world_pos):
+        """Converts the world position (x,y) into indices that can be used to access the costmap.
+
+        Args:
+            world_pos:
+                [B x K x T x 2] Tensor(B, K, T, 2) representing the world position being queried in the costmap.
+            metadata:
+                res: [B x 2]
+                length: [B x 2]
+                origin [B x 2]
+
+        Returns:
+            grid_pos:
+                [B x K x T x N x 2] Tensor representing the indices in the grid that correspond to the world position
+            invalid_mask:
+                [B x K x N x T] Tensor that is True if the corresponding pose is outside the map bounds
+        """
+        assert world_pos.shape[-1] >= self.ndims
+
+        # allow indexing of higher dimensional point data, assuming first ndims match
+        _world_pos = world_pos[..., :self.ndims]
+
+        N = torch.round(self.length / self.resolution)
+
+        trailing_dims = [1] * (_world_pos.ndim - 2)
+
+        grid_pos = (_world_pos - self.origin.view(-1, *trailing_dims, 2)) / self.resolution.view(-1, *trailing_dims, 2)
+        grid_idxs = grid_pos.long()
+
+        invalid_mask = (grid_pos < 0).any(dim=-1) | (
+            grid_pos >= N.view(-1, *trailing_dims, 2)
+        ).any(dim=-1)
+
+        return grid_pos, invalid_mask
 
     def __eq__(self, other):
         if self.ndims != other.ndims:

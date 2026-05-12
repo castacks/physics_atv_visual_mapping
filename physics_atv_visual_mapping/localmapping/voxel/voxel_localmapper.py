@@ -40,6 +40,8 @@ class VoxelLocalMapper(LocalMapper):
         self.max_clear_range = max_clear_range
         self.max_hit_confidence = max_hit_confidence
         self.min_misses = min_misses
+        # Raster indices touched by the latest lidar frame (before merge); for incremental normals / debug.
+        self.last_touched_raster_indices = torch.zeros(0, dtype=torch.long, device=self.device)
 
     def update_pose(self, pose: torch.Tensor):
         """
@@ -59,6 +61,7 @@ class VoxelLocalMapper(LocalMapper):
 
     def add_feature_pc(self, pos: torch.Tensor, feat_pc: FeaturePointCloudTorch, debug=False):
         voxel_grid_new = VoxelGrid.from_feature_pc(feat_pc, self.metadata, self.n_features)
+        self.last_touched_raster_indices = torch.unique(voxel_grid_new.raster_indices.detach())
 
         if self.do_raytrace:
             # self.raytracer.raytrace(pos, voxel_grid_meas=voxel_grid_new, voxel_grid_agg=self.voxel_grid)

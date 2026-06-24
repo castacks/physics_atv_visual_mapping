@@ -12,6 +12,9 @@ from physics_atv_visual_mapping.image_processing.processing_blocks.vlad import V
 from physics_atv_visual_mapping.image_processing.processing_blocks.pca_vlad import (
     PCAVLADBlock,
 )
+from physics_atv_visual_mapping.image_processing.processing_blocks.talk2dino_seg import (
+    Talk2DinoSegBlock,
+)
 # from physics_atv_visual_mapping.image_processing.processing_blocks.ganav import GANavBlock
 
 from physics_atv_visual_mapping.utils import normalize_dino
@@ -37,6 +40,10 @@ def setup_image_pipeline(config):
             block = VLADBlock(**block_config["args"], models_dir=config["models_dir"])
         elif btype == "pca_vlad":
             block = PCAVLADBlock(
+                **block_config["args"], models_dir=config["models_dir"]
+            )
+        elif btype == "talk2dino_seg":
+            block = Talk2DinoSegBlock(
                 **block_config["args"], models_dir=config["models_dir"]
             )
         # elif btype == 'ganav':
@@ -74,6 +81,12 @@ class ImagePipeline:
         for block in self.blocks:
             out += "\t" + str(block) + "\n"
         return out
+
+    @property
+    def output_feature_keys(self):
+        if self.blocks:
+            return getattr(self.blocks[-1], "output_feature_keys", None)
+        return None
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 import numpy as np
 import rclpy
 import torch
+import torch_scatter
 
 # import matplotlib.pyplot as plt
 import cv2
@@ -104,6 +105,133 @@ def obtain_projection_matrix(intrinsics, extrinsics):
     P = P[:-1, :]
 
     return P
+
+
+def get_projection_matrix(intrinsics, extrinsics):
+    """Batched projection matrix helper for semantic pointcloud colorization."""
+    P = torch.matmul(intrinsics, extrinsics)
+    return P[..., :-1, :]
+
+
+def get_pixel_projection(points, P, images):
+    """Project points into one or more images.
+
+    Args:
+        points: [N, 3] points in the source frame expected by P.
+        P: [B, 3, 4] camera projection matrices.
+        images: [B, H, W, C] feature images.
+    """
+    iw = images.shape[2]
+    ih = images.shape[1]
+
+    ones = torch.ones_like(points[:, [0]])
+    points_hm = torch.cat([points[:, :3], ones], dim=-1)
+
+    hm_px = (P.view(-1, 1, 3, 4) @ points_hm.view(1, -1, 4, 1)).squeeze(-1)
+    hm_norm = hm_px / torch.clamp(hm_px[..., [2]], min=1e-8)
+    coords = hm_norm[..., :-1]
+
+    valid_mask = (
+        (coords[..., 0] >= 0.0)
+        & (coords[..., 0] < iw)
+        & (coords[..., 1] >= 0.0)
+        & (coords[..., 1] < ih)
+        & (hm_px[..., 2] > 0.0)
+    )
+    return coords, valid_mask
+
+
+def cleanup_projection(points, pixel_coords, valid_mask, images):
+    """Remove projection bleed by keeping the nearest range cluster per pixel."""
+    iw = images.shape[2]
+    ih = images.shape[1]
+    ni = images.shape[0]
+
+    ranges = torch.linalg.norm(points[:, :3], dim=-1).view(1, -1).tile(ni, 1)
+    ranges[~valid_mask] = 1e10
+
+    pixel_coords_trunc = pixel_coords.long()
+    pixel_coords_trunc[~valid_mask] = 0
+    pixel_raster_idxs = pixel_coords_trunc[..., 1] * iw + pixel_coords_trunc[..., 0]
+
+    min_range = torch_scatter.scatter(
+        src=ranges,
+        index=pixel_raster_idxs,
+        dim=-1,
+        dim_size=iw * ih,
+        reduce="min",
+    ).view(ni, ih, iw)
+    mean_sq_range = torch_scatter.scatter(
+        src=ranges ** 2,
+        index=pixel_raster_idxs,
+        dim=-1,
+        dim_size=iw * ih,
+        reduce="mean",
+    )
+    mean_range = torch_scatter.scatter(
+        src=ranges,
+        index=pixel_raster_idxs,
+        dim=-1,
+        dim_size=iw * ih,
+        reduce="mean",
+    )
+    std_range = torch.sqrt(torch.clamp(mean_sq_range - mean_range ** 2, min=0.0)).view(ni, ih, iw)
+
+    ixs = pixel_coords_trunc[..., 1]
+    iys = pixel_coords_trunc[..., 0]
+    ibs = torch.arange(ni, device=points.device).view(ni, 1).tile(1, ixs.shape[-1])
+
+    query_ranges = min_range[ibs, ixs, iys]
+    query_range_stds = std_range[ibs, ixs, iys]
+    too_far = (ranges - query_ranges) > torch.clamp(query_range_stds, min=1.0)
+    return ~too_far & valid_mask
+
+
+def colorize(pixel_coordinates, valid_mask, images, bilinear_interpolation=True, reduce=True):
+    """Sample image features at projected point locations."""
+    n_images, _, _, n_features = images.shape
+    n_points = pixel_coordinates.shape[1]
+
+    pixel_coordinates = pixel_coordinates.clone()
+    pixel_coordinates[~valid_mask] = 0
+
+    if bilinear_interpolation:
+        rem = torch.frac(pixel_coordinates)
+        offset = torch.tensor(
+            [[0, 0], [1, 0], [0, 1], [1, 1]],
+            device=images.device,
+        ).view(4, 1, 1, 2)
+        idxs = pixel_coordinates.view(1, n_images, n_points, 2).long() + offset
+        idxs[..., 0] = idxs[..., 0].clip(0, images.shape[2] - 1)
+        idxs[..., 1] = idxs[..., 1].clip(0, images.shape[1] - 1)
+
+        weights = torch.stack(
+            [
+                (1.0 - rem[..., 0]) * (1.0 - rem[..., 1]),
+                rem[..., 0] * (1.0 - rem[..., 1]),
+                (1.0 - rem[..., 0]) * rem[..., 1],
+                rem[..., 0] * rem[..., 1],
+            ],
+            dim=0,
+        )
+        img_idxs = torch.arange(n_images, device=images.device).view(1, n_images, 1)
+        feats = images[img_idxs, idxs[..., 1], idxs[..., 0]]
+        sampled = (weights.view(4, n_images, n_points, 1) * feats).sum(dim=0)
+    else:
+        idxs = pixel_coordinates.long()
+        idxs[..., 0] = idxs[..., 0].clip(0, images.shape[2] - 1)
+        idxs[..., 1] = idxs[..., 1].clip(0, images.shape[1] - 1)
+        img_idxs = torch.arange(n_images, device=images.device).view(n_images, 1)
+        sampled = images[img_idxs, idxs[..., 1], idxs[..., 0]]
+
+    sampled[~valid_mask] = 0.0
+    if not reduce:
+        return sampled, valid_mask
+
+    cnt = valid_mask.sum(dim=0)
+    denom = torch.clamp(cnt, min=1).view(-1, 1)
+    sampled_reduce = sampled.sum(dim=0) / denom
+    return sampled_reduce, cnt
 
 
 def get_pixel_from_3D_source(lidar_points, P):

@@ -1,0 +1,48 @@
+0:
+  id: floor
+  prompt: floor or ground surface
+  color: [80, 190, 80]
+1:
+  id: wall
+  prompt: wall or vertical structure
+  color: [160, 160, 160]
+2:
+  id: ceiling
+  prompt: ceiling or overhead structure
+  color: [120, 80, 160]
+3:
+  id: stairs
+  prompt: stairs or stair steps
+  color: [255, 210, 70]
+4:
+  id: ramp
+  prompt: ramp or sloped floor
+  color: [70, 170, 255]
+5:
+  id: rubble
+  prompt: rubble debris broken concrete rocks
+  color: [120, 95, 75]
+6:
+  id: obstacle
+  prompt: obstacle clutter or blocked passage
+  color: [230, 60, 60]
+7:
+  id: doorway
+  prompt: doorway opening or passage
+  color: [70, 220, 210]
+8:
+  id: person
+  prompt: person human victim
+  color: [255, 150, 210]
+9:
+  id: robot_vehicle_equipment
+  prompt: robot vehicle equipment or machinery
+  color: [245, 245, 80]
+10:
+  id: vegetation
+  prompt: vegetation plants or grass
+  color: [35, 135, 55]
+11:
+  id: water
+  prompt: water puddle or wet surface
+  color: [40, 110, 255]

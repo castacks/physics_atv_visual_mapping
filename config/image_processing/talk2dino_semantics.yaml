@@ -1,0 +1,8 @@
+-
+  type: talk2dino_seg
+  args:
+    ontology_fp: ""
+    image_insize: [128, 224]
+    sharpness: 20.0
+    return_logits: true
+    input_color_order: bgr

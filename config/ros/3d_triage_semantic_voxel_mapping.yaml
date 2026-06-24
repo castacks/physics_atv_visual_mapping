@@ -1,0 +1,27 @@
+models_dir: /home/tartandriver/tartandriver_ws/models
+
+localmapping:
+    mapper_type: voxel
+    layer_key: semantic_logits
+    ema: 0.5
+    n_features: -1
+
+    passthrough_thresh: 0.4
+    hit_miss_decay: 0.85
+    range_buffer: 0.1
+    max_clear_range: 25.0
+    max_hit_confidence: 15.0
+    min_misses: 3.0
+
+    metadata:
+        origin: [-15., -15., -3.]
+        length: [30., 30., 6.]
+        resolution: [0.1, 0.1, 0.05]
+
+    raytracer:
+        type: frustum
+        sensor:
+            type: OS1-128
+
+device: cuda
+viz: True

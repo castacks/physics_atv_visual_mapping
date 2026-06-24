@@ -14,6 +14,31 @@ collection of common geometry operations on poses, points, etc
 DEG_2_RAD = PI/180.
 RAD_2_DEG = 180./PI
 
+
+def load_ontology(ontology):
+    """Convert a human-readable semantic ontology YAML dict into tensors/lists."""
+    sorted_keys = sorted([int(k) for k in ontology.keys()])
+    entries = [ontology[k] if k in ontology else ontology[str(k)] for k in sorted_keys]
+
+    res = {}
+    res["ids"] = sorted_keys
+    res["labels"] = [entry["id"] for entry in entries]
+    res["prompts"] = [entry["prompt"] for entry in entries]
+    res["palette"] = torch.tensor([entry["color"] for entry in entries])
+    return res
+
+
+def apply_palette(x, palette, softmax=False):
+    """Apply a semantic palette to a tensor with semantic channels in the last dim."""
+    bdims = [1] * (len(x.shape) - 1)
+
+    _x = x.unsqueeze(-1)
+    if softmax:
+        _x = _x.softmax(dim=-2)
+
+    _palette = palette.float().to(_x.device).reshape(*bdims, -1, 3)
+    return (_x * _palette).sum(dim=-2)
+
 def normalize_dino(img, return_min_max=False):
     _img = img[..., :3]
     _ndims = len(img.shape) - 1

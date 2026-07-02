@@ -63,6 +63,21 @@ class VoxelLocalMapper(LocalMapper):
     def __init__(self, metadata, feature_keys, ema, raytracer=None, n_features=-1, device='cpu',
                  passthrough_thresh=0.4, hit_miss_decay=0.85, range_buffer=0.1,
                  max_clear_range=25.0, max_hit_confidence=15.0, min_misses=3.0):
+        """
+        Args:
+            metadata: LocalMapperMetadata for the voxel grid
+            feature_keys: FeatureKeyList describing the voxel feature channels
+            ema: Exponential moving average weight for feature updates
+            raytracer: Optional raytracer for dynamic obstacle clearing
+            n_features: Number of feature keys to keep, or all keys when -1
+            device: torch device
+            passthrough_thresh: Threshold for miss/(hit+miss) ratio to cull voxels (lower = faster clearing)
+            hit_miss_decay: Decay factor for hit/miss counts each frame (1.0 = no decay, lower = faster clearing)
+            range_buffer: Buffer distance (m) subtracted from measured range for safer clearing
+            max_clear_range: Maximum range (m) to use for clearing when no measurement in bin.
+            max_hit_confidence: Maximum hit confidence value to clamp hits to (prevents infinite mass)
+            min_misses: Minimum number of misses required before culling a voxel
+        """
         super().__init__(metadata, device)
         assert metadata.ndims == 3, "VoxelLocalMapper requires 3d metadata"
         self.n_features = len(feature_keys) if n_features == -1 else n_features
@@ -81,9 +96,12 @@ class VoxelLocalMapper(LocalMapper):
         self.max_clear_range = max_clear_range
         self.max_hit_confidence = max_hit_confidence
         self.min_misses = min_misses
+        # Raster indices touched by the latest lidar frame (before merge); for incremental normals / debug.
+        self.last_touched_raster_indices = torch.zeros(0, dtype=torch.long, device=self.device)
 
     def clear(self):
         self.voxel_grid = VoxelGrid(self.metadata, self.feature_keys, self.device)
+        self.last_touched_raster_indices = torch.zeros(0, dtype=torch.long, device=self.device)
 
     def update_pose(self, pose: torch.Tensor):
         """
@@ -102,6 +120,7 @@ class VoxelLocalMapper(LocalMapper):
 
     def add_feature_pc(self, pos: torch.Tensor, feat_pc: FeaturePointCloudTorch, debug=False):
         voxel_grid_new = VoxelGrid.from_feature_pc(feat_pc, self.metadata, self.n_features, pos, strategy='mindist')
+        self.last_touched_raster_indices = torch.unique(voxel_grid_new.raster_indices.detach())
 
         if self.assert_feat_match:
             assert self.voxel_grid.feature_keys == voxel_grid_new.feature_keys, f"voxel feat key mismatch: mapper has {self.voxel_grid.feature_keys}, added pc has {voxel_grid_new.feature_keys}"
@@ -257,6 +276,11 @@ class VoxelLocalMapper(LocalMapper):
         feats_out[merge_mask] = (1.-self.ema) * vg1_feats[merge_mask] + self.ema * vg2_feats[merge_mask]
 
         return feats_out
+
+    def reset(self, pose=None):
+        self.clear()
+        if pose is not None:
+            self.update_pose(pose)
 
     def to(self, device):
         self.device = device
@@ -796,4 +820,3 @@ class VoxelGrid:
         self.min_coords = self.min_coords.to(device)
         self.max_coords = self.max_coords.to(device)
         return self
-

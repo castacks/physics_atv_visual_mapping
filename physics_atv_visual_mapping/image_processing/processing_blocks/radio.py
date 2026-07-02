@@ -2,7 +2,6 @@ import os
 import torch
 import torchvision
 import torch.nn.functional as F
-
 # from ptflops import get_model_complexity_info
 # from thop import profile
 
@@ -72,13 +71,11 @@ class RadioBlock(ImageProcessingBlock):
         intrinsics[:, 1, 1] *= dy / iy
         intrinsics[:, 1, 2] *= dy / iy
 
-        import pdb; pdb.set_trace()
         return img_out, intrinsics
 
     @property
     def output_feature_keys(self):
         # self.radio.n_output_channels
-        import pdb; pdb.set_trace()
         return FeatureKeyList(
             label=[f"radio_{i}" for i in range(self.radio.embed_dim)],
             metainfo=["vfm" for i in range(self.radio.embed_dim)]

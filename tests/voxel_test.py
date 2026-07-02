@@ -167,6 +167,61 @@ def voxel_shift_data():
         'localmapper': voxel_localmapper
     }
 
+@pytest.fixture(scope="module")
+def voxel_timestamp_data():
+    origin = torch.rand(3) * -10.
+    res = torch.rand(3) * 0.05 + 0.05
+    n = torch.randint(400, size=(3,))
+    length = res * n
+    #round origin to nearest multiple of resolution
+    origin = (origin//res)*res
+    shift = torch.randint(20, size=(3, )) - 10
+
+    metadata = LocalMapperMetadata(
+        origin = origin,
+        length = length,
+        resolution = res
+    )
+
+    feat_pcs = []
+    poses = []
+
+    #random pts fine for this test
+    n_pts = 10000
+    n_feats = 5000
+    feat_dim = 4
+
+    ## use a real unix timestamp to stress double presicion
+    curr_time = 1775568034.9604232
+
+    feat_pc = make_rand_pc(n_pts, n_feats, feat_dim, metadata)
+    voxel_localmapper = VoxelLocalMapper(
+        metadata = metadata,
+        feature_keys = feat_pc.feature_keys,
+        ema = 1.0
+    )
+
+    pos = torch.zeros(7)
+    pos[-1] = 1.
+    pos[:3] = shift * res
+    voxel_localmapper.update_pose(pos)
+
+
+    for i in range(10):
+        feat_pc = make_rand_pc(n_pts, n_feats, feat_dim, metadata)
+        feat_pc.stamp = curr_time + (i/10.)
+        voxel_localmapper.add_feature_pc(pos, feat_pc)
+
+        poses.append(pos)
+        feat_pcs.append(feat_pc)
+
+    return {
+        'poses': poses,
+        'metadata': metadata,
+        'feat_pcs': feat_pcs,
+        'localmapper': voxel_localmapper
+    }
+
 def test_metadata(voxel_insert_data):
     base_metadata = voxel_insert_data['metadata']
     voxel_metadata = voxel_insert_data['localmapper'].voxel_grid.metadata
@@ -319,3 +374,55 @@ def test_voxel_shift(voxel_shift_data):
 
     assert len(voxel_raster_idxs) == len(pc_raster_idxs), "incorrect number of voxels!"
     assert torch.all(pc_raster_idxs == voxel_raster_idxs), "voxel grid putting voxels in the wrong places!"
+
+def test_voxel_timestamp(voxel_timestamp_data):
+    """
+    Test timestamp math on a few pcs. Things that we can check:
+        1. every voxel timestamp comes from a pc timestamp
+        2. first pc timestamp is exactly first_update time
+        3. last pc timestamp is exactly last update time
+        4. all pts within the corresponding voxel bounds
+    """
+    pcs = voxel_timestamp_data['feat_pcs']
+    voxel_grid = voxel_timestamp_data['localmapper'].voxel_grid
+
+    pc_times = torch.tensor([x.stamp for x in pcs], dtype=torch.double)
+    voxel_first_update_times = voxel_grid.first_update_time
+    voxel_last_update_times = voxel_grid.last_update_time
+
+    ## check that every voxel update time matches a pointcloud ##
+    assert all([x in pc_times for x in voxel_first_update_times])
+    assert all([x in pc_times for x in voxel_last_update_times])
+
+    ## check that the first pc passes its stamp to first_update time
+    first_pc = pcs[0]
+    gidxs, valid_mask = voxel_grid.get_grid_idxs(first_pc.pts)
+    ridxs = voxel_grid.grid_indices_to_raster_indices(gidxs)
+    for ridx in ridxs[valid_mask]:
+        vox_idx = torch.argwhere(voxel_grid.raster_indices == ridx)
+        assert vox_idx.numel() == 1
+        _ftime = voxel_grid.first_update_time[vox_idx.item()].item()
+        assert abs(_ftime - first_pc.stamp) < 1e-10
+
+    ## check that the last pc passes its stamp to last_update time
+    last_pc = pcs[-1]
+    gidxs, valid_mask = voxel_grid.get_grid_idxs(last_pc.pts)
+    ridxs = voxel_grid.grid_indices_to_raster_indices(gidxs)
+    for ridx in ridxs[valid_mask]:
+        vox_idx = torch.argwhere(voxel_grid.raster_indices == ridx)
+        assert vox_idx.numel() == 1
+        _ltime = voxel_grid.last_update_time[vox_idx.item()].item()
+        assert abs(_ltime - last_pc.stamp) < 1e-10
+
+    ## for all pcs, check stamp within bounds
+    for pc in pcs:
+        gidxs, valid_mask = voxel_grid.get_grid_idxs(pc.pts)
+        ridxs = voxel_grid.grid_indices_to_raster_indices(gidxs)
+        for ridx in ridxs[valid_mask]:
+            vox_idx = torch.argwhere(voxel_grid.raster_indices == ridx)
+            assert vox_idx.numel() == 1
+            _ftime = voxel_grid.first_update_time[vox_idx.item()].item()
+            _ltime = voxel_grid.last_update_time[vox_idx.item()].item()
+
+            assert pc.stamp >= (_ftime - 1e-10)
+            assert pc.stamp <= (_ltime + 1e-10)

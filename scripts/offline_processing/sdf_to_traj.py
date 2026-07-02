@@ -25,9 +25,9 @@ This will be useful for a number of perception-related filtering things
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--run_dir', type=str, required=True, help='dir ot run on')
-    parser.add_argument('--odom_dir', type=str, required=False, default='odometry', help='dir ot get odom data from')
-    parser.add_argument('--bev_dir', type=str, required=False, default='bev_map_reduce')
+    parser.add_argument('--run_dir', type=str, required=True, help='dir to run on')
+    parser.add_argument('--odom_dir', type=str, required=False, default='super_odometry/odometry', help='dir ot get odom data from')
+    parser.add_argument('--bev_dir', type=str, required=False, default='mapping/bev_map_reduce')
     parser.add_argument('--device', type=str, required=False, default='cuda')
     args = parser.parse_args()
 

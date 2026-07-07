@@ -22,11 +22,16 @@ class LocalMapperMetadata:
         self.ndims = self.origin.shape[-1]
         self.device = device
 
-    def get_coords(self):
+    def get_coords(self, centers=False):
         coords_1d = [
             self.origin[i] + torch.arange(self.N[i], device=self.origin.device) * self.resolution[i] for i in range(self.ndims)
         ]
-        return torch.stack(torch.meshgrid(*coords_1d, indexing='ij'), dim=-1)
+        res = torch.stack(torch.meshgrid(*coords_1d, indexing='ij'), dim=-1)
+
+        if centers:
+            res += (self.resolution/2.).reshape(*([1]*self.ndims), self.ndims)
+
+        return res
 
     def random_init(ndim, device='cpu'):
         origin = torch.rand(ndim) * -10.

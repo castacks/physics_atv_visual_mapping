@@ -7,6 +7,7 @@ from ros_torch_converter.datatypes.pointcloud import FeaturePointCloudTorch
 from physics_atv_visual_mapping.localmapping.base import LocalMapper
 from physics_atv_visual_mapping.localmapping.metadata import LocalMapperMetadata
 from physics_atv_visual_mapping.feature_key_list import FeatureKeyList
+from physics_atv_visual_mapping.pointcloud_colorization.torch_color_pcl_utils import colorize
 from physics_atv_visual_mapping.utils import *
 
 #similar to Fankhauser et al 2018
@@ -393,6 +394,7 @@ class BEVGrid:
     @property
     def known(self):
         return self.hits > 0
+    
     def replace_features(self, new_fks, new_data):
         """
         Make a COPY of the BEV grid with new features/keys
@@ -542,6 +544,54 @@ class BEVGrid:
         ys = raster_idxs % self.metadata.N[1]
 
         return torch.stack([xs, ys], axis=-1)
+    
+    def grid_sample_feature_idxs(self, coords, feature_idxs, mask_idx=-1, bilinear=False):
+        cshape = coords.shape[:-1]
+        coords_flat = coords.view(-1, 2)
+        gidxs, coords_oob = self.metadata.world_to_grid(coords_flat)
+        data = self.data[:, :, feature_idxs]
+
+        feats, _ = colorize(
+            gidxs[:, [1,0]].unsqueeze(0), #[colorize is for img coord convention so flip]
+            ~coords_oob.unsqueeze(0),
+            data.unsqueeze(0),
+            bilinear_interpolation=bilinear,
+            reduce=False
+        )
+
+        feats = feats.squeeze(0)
+
+        if mask_idx >= 0:
+            _mask = (self.data[:, :, mask_idx] > 0.5).float()
+            mask_coord, _ = colorize(
+                gidxs[:, [1,0]].unsqueeze(0), #[colorize is for img coord convention so flip]
+                ~coords_oob.unsqueeze(0),
+                _mask.unsqueeze(0).unsqueeze(-1),
+                bilinear_interpolation=bilinear,
+                reduce=False
+            )
+
+            #true iff coord mask is also true
+            mask_coord = (mask_coord > 0.5).squeeze(0).squeeze(-1)
+            mask_out = ~coords_oob & mask_coord
+        else:
+            mask_out = ~coords_oob
+
+        feats[~mask_out] = 0.
+
+        return feats.reshape(*cshape, -1), mask_out
+
+    def grid_sample_metainfo(self, coords, metainfo, mask_layer=None, bilinear=False):
+        feat_idxs = [i for i,m in enumerate(self.feature_keys.metainfo) if m==metainfo]
+        mask_idx = self.feature_keys.index(mask_layer) if mask_layer else -1
+
+        return self.grid_sample_feature_idxs(coords, feat_idxs, mask_idx, bilinear)
+    
+    def grid_sample_feature_keys(self, coords, feature_keys, mask_layer=None, bilinear=False):
+        feat_idxs = [self.feature_keys.index(k) for k in feature_keys]
+        mask_idx = self.feature_keys.index(mask_layer) if mask_layer else -1
+
+        return self.grid_sample_feature_idxs(coords, feat_idxs, mask_idx, bilinear)
 
     def visualize(self, fig=None, axs=None):
         if fig is None or axs is None:
@@ -567,7 +617,7 @@ class BEVGrid:
             origin="lower",
             extent=extent,
         )
-        axs[1].imshow(self.mask.T.cpu().numpy(), origin="lower", extent=extent)
+        axs[1].imshow(self.known.T.cpu().numpy(), origin="lower", extent=extent)
 
         axs[0].set_title("features")
         axs[1].set_title("known")

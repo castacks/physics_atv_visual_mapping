@@ -53,6 +53,11 @@ def get_intrinsics(intrinsics_matrix, tf_in_optical=True):
         - intrinsics_matrix:
             4x4 intrinsics matrix that takes into account rotation between camera axes and source axes.
     """
+    if not isinstance(intrinsics_matrix, torch.Tensor):
+        return get_intrinsics(torch.tensor(intrinsics_matrix).float(), tf_in_optical)
+
+    if len(intrinsics_matrix.shape) == 1:
+        return get_intrinsics(intrinsics_matrix.reshape(3, 3), tf_in_optical)
 
     if tf_in_optical:
         I = torch.eye(4, device=intrinsics_matrix.device)
@@ -87,7 +92,7 @@ def get_extrinsics(extrinsics_matrix, tf_in_optical=True):
         return extrinsics_matrix
 
 
-def obtain_projection_matrix(intrinsics, extrinsics):
+def get_projection_matrix(intrinsics, extrinsics):
     """Returns projection matrix from 3D points in "target" coordinate frame to 2D points in pixel space.
 
     Args:
@@ -100,138 +105,245 @@ def obtain_projection_matrix(intrinsics, extrinsics):
         - P:
             3x4 camera projection matrix that transforms 3D points in "source" coordinate frame to 2D points in pixel space.
     """
-
     P = torch.matmul(intrinsics, extrinsics)
-    P = P[:-1, :]
+    P = P[..., :-1, :]
 
     return P
 
 
-def get_projection_matrix(intrinsics, extrinsics):
-    """Batched projection matrix helper for semantic pointcloud colorization."""
-    P = torch.matmul(intrinsics, extrinsics)
-    return P[..., :-1, :]
-
-
 def get_pixel_projection(points, P, images):
-    """Project points into one or more images.
+    """Returns projection information for a set of points
+        onto a set of images
 
     Args:
-        points: [N, 3] points in the source frame expected by P.
-        P: [B, 3, 4] camera projection matrices.
-        images: [B, H, W, C] feature images.
+        points: [N x 3] FloatTensor of points
+        P: [B x 3 x 4] Projection matrix for each image
+        images [B x W x H x C] FloatTensor of images
+
+    Returns:
+        coords: [B x N x 2] FloatTensor of pixel coords for each image
+        valid_mask: [B x N] BoolTensor containing True if the N-th pt is visible in the B-th image
     """
     iw = images.shape[2]
     ih = images.shape[1]
 
     ones = torch.ones_like(points[:, [0]])
-    points_hm = torch.cat([points[:, :3], ones], dim=-1)
+    points_hm = torch.cat([points, ones], dim=-1)
 
+    #[B x N x 3]
     hm_px = (P.view(-1, 1, 3, 4) @ points_hm.view(1, -1, 4, 1)).squeeze(-1)
-    hm_norm = hm_px / torch.clamp(hm_px[..., [2]], min=1e-8)
+    hm_norm = hm_px / hm_px[..., [2]]
+
     coords = hm_norm[..., :-1]
 
-    valid_mask = (
-        (coords[..., 0] >= 0.0)
-        & (coords[..., 0] < iw)
-        & (coords[..., 1] >= 0.0)
-        & (coords[..., 1] < ih)
-        & (hm_px[..., 2] > 0.0)
-    )
+    ## Make sure pixels are within image frame
+    cond1 = coords[..., 0] >= 0.
+    cond2 = coords[..., 0] < iw
+    cond3 = coords[..., 1] >= 0.
+    cond4 = coords[..., 1] < ih
+    ## Make sure lidar points are in front of camera
+    cond5 = hm_px[..., 2] > 0.
+
+    valid_mask = cond1 & cond2 & cond3 & cond4 & cond5
+
     return coords, valid_mask
 
 
 def cleanup_projection(points, pixel_coords, valid_mask, images):
-    """Remove projection bleed by keeping the nearest range cluster per pixel."""
+    """
+    Perform simple outlier removal per pixel to prevent "bleeding" of projection.
+    Algo is something like this:
+        For every pixel:
+            - find the set of points that project into that pixel
+            - get min and stddev of range
+            - pixels beyond this range are actually invalid
+
+    Args:
+        points: [Nx3] FloatTensor of points (in base frame)
+        coords: [B x N x 2] FloatTensor of pixel coords for each image
+        valid_mask: [B x N] BoolTensor containing True if the N-th pt is visible in the B-th image
+
+    Returns:
+        valid_mask: [B x N] BoolTensor of whether the N-th pt was filtered in the B-th image
+    """
     iw = images.shape[2]
     ih = images.shape[1]
     ni = images.shape[0]
 
-    ranges = torch.linalg.norm(points[:, :3], dim=-1).view(1, -1).tile(ni, 1)
+    ranges = torch.linalg.norm(points, dim=-1)
+    ranges = ranges.view(1, -1).tile(images.shape[0], 1)
     ranges[~valid_mask] = 1e10
 
+    #need to scatter ranges into a BxWxH
     pixel_coords_trunc = pixel_coords.long()
     pixel_coords_trunc[~valid_mask] = 0
+
     pixel_raster_idxs = pixel_coords_trunc[..., 1] * iw + pixel_coords_trunc[..., 0]
 
-    min_range = torch_scatter.scatter(
-        src=ranges,
-        index=pixel_raster_idxs,
-        dim=-1,
-        dim_size=iw * ih,
-        reduce="min",
-    ).view(ni, ih, iw)
-    mean_sq_range = torch_scatter.scatter(
-        src=ranges ** 2,
-        index=pixel_raster_idxs,
-        dim=-1,
-        dim_size=iw * ih,
-        reduce="mean",
-    )
-    mean_range = torch_scatter.scatter(
-        src=ranges,
-        index=pixel_raster_idxs,
-        dim=-1,
-        dim_size=iw * ih,
-        reduce="mean",
-    )
-    std_range = torch.sqrt(torch.clamp(mean_sq_range - mean_range ** 2, min=0.0)).view(ni, ih, iw)
+    min_range = torch_scatter.scatter(src=ranges, index=pixel_raster_idxs, dim=-1, dim_size=iw*ih, reduce='min')
+    min_range = min_range.view(ni, ih, iw) #[B x W x H]
 
+    #Var[X] = E[X^2] - E[X]^2
+    mean_sq_range = torch_scatter.scatter(src=ranges**2, index=pixel_raster_idxs, dim=-1, dim_size=iw*ih, reduce='mean')
+    mean_range = torch_scatter.scatter(src=ranges, index=pixel_raster_idxs, dim=-1, dim_size=iw*ih, reduce='mean')
+
+    std_range = torch.sqrt(torch.clamp(mean_sq_range - mean_range**2, min=0.)).view(ni, ih, iw)
+
+    #now we can index into the min range image with coords
     ixs = pixel_coords_trunc[..., 1]
     iys = pixel_coords_trunc[..., 0]
+
     ibs = torch.arange(ni, device=points.device).view(ni, 1).tile(1, ixs.shape[-1])
 
     query_ranges = min_range[ibs, ixs, iys]
     query_range_stds = std_range[ibs, ixs, iys]
-    too_far = (ranges - query_ranges) > torch.clamp(query_range_stds, min=1.0)
-    return ~too_far & valid_mask
+
+    # too_far = (ranges - query_ranges) > (1. * query_range_stds)
+
+    #magic number, not sure the best way to cluster right now.
+    too_far = (ranges - query_ranges) > 1.
+
+    new_valid = ~too_far & valid_mask
+
+    return new_valid
 
 
 def colorize(pixel_coordinates, valid_mask, images, bilinear_interpolation=True, reduce=True):
-    """Sample image features at projected point locations."""
-    n_images, _, _, n_features = images.shape
-    n_points = pixel_coordinates.shape[1]
+    """
+    get a set of features/colors for a set of pixel coordinats/images
 
-    pixel_coordinates = pixel_coordinates.clone()
-    pixel_coordinates[~valid_mask] = 0
+    Args:
+        coords: [B x N x 2] FloatTensor of pixel coords for each image
+        valid_mask: [B x N] BoolTensor containing True if the N-th pt is visible in the B-th image
+        images [B x W x H x C] FloatTensor of images
+        bilinear_interpolation: If true, get feats w/ bilinear interpolation else truncate
+        reduce: change the output
 
-    if bilinear_interpolation:
-        rem = torch.frac(pixel_coordinates)
-        offset = torch.tensor(
-            [[0, 0], [1, 0], [0, 1], [1, 1]],
-            device=images.device,
-        ).view(4, 1, 1, 2)
-        idxs = pixel_coordinates.view(1, n_images, n_points, 2).long() + offset
-        idxs[..., 0] = idxs[..., 0].clip(0, images.shape[2] - 1)
-        idxs[..., 1] = idxs[..., 1].clip(0, images.shape[1] - 1)
-
-        weights = torch.stack(
-            [
-                (1.0 - rem[..., 0]) * (1.0 - rem[..., 1]),
-                rem[..., 0] * (1.0 - rem[..., 1]),
-                (1.0 - rem[..., 0]) * rem[..., 1],
-                rem[..., 0] * rem[..., 1],
-            ],
-            dim=0,
-        )
-        img_idxs = torch.arange(n_images, device=images.device).view(1, n_images, 1)
-        feats = images[img_idxs, idxs[..., 1], idxs[..., 0]]
-        sampled = (weights.view(4, n_images, n_points, 1) * feats).sum(dim=0)
-    else:
-        idxs = pixel_coordinates.long()
-        idxs[..., 0] = idxs[..., 0].clip(0, images.shape[2] - 1)
-        idxs[..., 1] = idxs[..., 1].clip(0, images.shape[1] - 1)
-        img_idxs = torch.arange(n_images, device=images.device).view(n_images, 1)
-        sampled = images[img_idxs, idxs[..., 1], idxs[..., 0]]
-
-    sampled[~valid_mask] = 0.0
-    if not reduce:
-        return sampled, valid_mask
+    Returns:
+        if reduce=True:
+            features: [N x C] FloatTensor of features for each pixel.
+                If a pixel is in multiple images, we will average
+                If a pixel is in no images, we will pad with zeros
+            cnt: [N] LongTensor containing the amount of images the n-th pixel was in
+        if reduce=False:
+            features: [B x N x C] Float tensor containing the feature of the B-th image on the N-th coordinate
+            cnt: same as valid_mask
+    """
+    ni, ih, iw, ic = images.shape
 
     cnt = valid_mask.sum(dim=0)
-    denom = torch.clamp(cnt, min=1).view(-1, 1)
-    sampled_reduce = sampled.sum(dim=0) / denom
-    return sampled_reduce, cnt
+
+    coords = pixel_coordinates.clone()
+    coords[~valid_mask] = 0
+
+    if bilinear_interpolation:
+        interp_features = bilinear_interpolate(coords, images)
+        interp_features[~valid_mask] = 0.
+
+        if reduce:
+            interp_features = interp_features.sum(dim=0) / (cnt + 1e-6).view(-1, 1)
+            return interp_features, cnt
+        else:
+            return interp_features, valid_mask
+
+    else:
+        ixs = coords[..., 1].long()
+        iys = coords[..., 0].long()
+        ibs = torch.arange(ni, device=images.device).view(ni, 1).tile(1, ixs.shape[-1])
+
+        features = images[ibs, ixs, iys]
+        features[~valid_mask] = 0.
+
+        if reduce:
+            features = features.sum(dim=0) / (cnt + 1e-16).view(-1, 1)
+            return features, cnt
+        else:
+            return features, valid_mask
+
+def bilinear_interpolate(coords, images):
+    """
+    Perform bilinear interpolation at pixel coordinates in image
+    Args:
+        pixel_coordinates: [B x N x 2] FloatTensor of pixel coordinates
+        image: [B x W x H x C] FloatTensor of image data
+    Returns:
+        interp_features: [B x N x F] Tensor of interpolated features
+    """
+    ni, ih, iw, ic = images.shape
+    rem = torch.frac(coords)
+    offset = torch.tensor([
+        [0, 0],
+        [1, 0],
+        [0, 1],
+        [1, 1]
+    ], device=images.device).view(4, 1, 1, 2)
+
+    #[4 x B x N x 2]
+    idxs = torch.tile(coords.view(1, ni, -1, 2), (4, 1, 1, 1)) + offset
+    #equivalent to same-padding
+    ixs = idxs[..., 1].long().clip(0, ih-1)
+    iys = idxs[..., 0].long().clip(0, iw-1)
+
+    weights = torch.stack([
+        (1.-rem[..., 0]) * (1.-rem[..., 1]),
+        rem[..., 0] * (1.-rem[..., 1]),
+        (1. - rem[..., 0]) * rem[..., 1],
+        rem[..., 0] * rem[..., 1]
+    ], dim=0)
+
+    ibs = torch.arange(ni, device=images.device).view(1, ni, 1).tile(4, 1, ixs.shape[-1])
+
+    features = images[ibs, ixs, iys]
+    interp_features = (weights.view(4, ni, -1, 1) * features).sum(dim=0)
+
+    return interp_features
+
+def bilinear_interpolate_batch(coords, images, batch_idxs):
+    """
+    Perform bilinear interpolation at pixel coordinates in image
+
+    Args:
+        pixel_coordinates: [B x N x 2] FloatTensor of pixel coordinates
+        image: [B x W x H x C] FloatTensor of image data
+        batch_idxs: [N] LongTensor specifying which image each coord corresponds to
+
+    Returns:
+        interp_features: [N x F] Tensor of interpolated features
+    """
+    ni, ih, iw, ic = images.shape
+    rem = torch.frac(coords)
+    offset = torch.tensor([
+        [0, 0],
+        [1, 0],
+        [0, 1],
+        [1, 1]
+    ], device=images.device).view(4, 1, 2)
+
+    #[4 x N x 2]
+    idxs = torch.tile(coords.view(1, -1, 2), (4, 1, 1)) + offset
+    #equivalent to same-padding
+    ixs = idxs[..., 1].long().clip(0, ih-1)
+    iys = idxs[..., 0].long().clip(0, iw-1)
+
+    weights = torch.stack([
+        (1.-rem[..., 0]) * (1.-rem[..., 1]),
+        rem[..., 0] * (1.-rem[..., 1]),
+        (1. - rem[..., 0]) * rem[..., 1],
+        rem[..., 0] * rem[..., 1]
+    ], dim=0)
+
+    ibs = batch_idxs.view(1, -1).tile(4, 1)
+
+    features = images[ibs, ixs, iys]
+    interp_features = (weights.view(4, -1, 1) * features).sum(dim=0)
+
+    return interp_features
+
+
+def obtain_projection_matrix(intrinsics, extrinsics):
+    """Legacy single-camera alias retained for Airlab callers."""
+    P = torch.matmul(intrinsics, extrinsics)
+    return P[:-1, :]
 
 
 def get_pixel_from_3D_source(lidar_points, P):

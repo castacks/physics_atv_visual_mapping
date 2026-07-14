@@ -1,21 +1,16 @@
 import re
 from dataclasses import dataclass
 
-
 @dataclass
 class FeatureKeyList:
     label: list[str]
     metainfo: list[str]
 
-    def __post_init__(self):
-        assert len(self.label) == len(self.metainfo), "label/metainfo lengths must match"
-
     def __add__(self, other):
         return FeatureKeyList(
             label=self.label + other.label,
-            metainfo=self.metainfo + other.metainfo,
+            metainfo=self.metainfo + other.metainfo
         )
-
     def __len__(self):
         return len(self.label)
 
@@ -23,74 +18,90 @@ class FeatureKeyList:
         if isinstance(idx, slice):
             return FeatureKeyList(
                 label=self.label[idx],
-                metainfo=self.metainfo[idx],
+                metainfo=self.metainfo[idx]
             )
-        if hasattr(idx, "__iter__"):
+        elif hasattr(idx, '__iter__'):
             return FeatureKeyList(
                 label=[self.label[i] for i in idx],
-                metainfo=[self.metainfo[i] for i in idx],
+                metainfo=[self.metainfo[i] for i in idx]
             )
-        return FeatureKeyList(
-            label=[self.label[idx]],
-            metainfo=[self.metainfo[idx]],
-        )
+        else:
+            return FeatureKeyList(
+                label=[self.label[idx]],
+                metainfo=[self.metainfo[idx]]
+            )
 
     def __eq__(self, other):
-        if not hasattr(other, "label") or not hasattr(other, "metainfo"):
+        if len(self.label) != len(other.label):
             return False
-        return self.label == other.label and self.metainfo == other.metainfo
+
+        for x,y in zip(self.label, other.label):
+            if x != y:
+                return False
+
+        return True
 
     def __repr__(self):
-        if not self.label:
-            return "empty"
-
+        """
+        Make a simpler print that condenses similar keys
+        """
         out = ""
         prev_prefix = None
         prev_metainfo = None
         cnt = 1
-        prefix = self.label[0]
-        metainfo = self.metainfo[0]
+        for l, m in zip(self.label, self.metainfo):
+            res = re.match(r"^.+_\d+", l)
 
-        for label, metainfo in zip(self.label, self.metainfo):
-            res = re.match(r"^.+_\d+", label)
-            prefix = label if res is None else label.rsplit("_", 1)[0]
+            if res is None:
+                prefix = l
+            else:
+                prefix = l.rsplit('_', 1)[0]
 
-            if prev_prefix and prev_prefix == prefix and prev_metainfo == metainfo:
+            if prev_prefix and prev_prefix == prefix and prev_metainfo and prev_metainfo == m:
                 cnt += 1
+
             elif prev_prefix and prev_metainfo:
                 out += f"{prev_prefix} ({prev_metainfo}) x{cnt}, "
                 cnt = 1
 
             prev_prefix = prefix
-            prev_metainfo = metainfo
+            prev_metainfo = m
 
-        out += f"{prefix} ({metainfo}) x{cnt}"
+        out += f"{prefix} ({m}) x{cnt}"
         return out
 
     def index(self, key: str) -> int:
         return self.label.index(key)
 
     def index_pair(self, label_key: str, metainfo_key: str) -> int:
-        for idx, (label, metainfo) in enumerate(zip(self.label, self.metainfo)):
-            if label == label_key and metainfo == metainfo_key:
+        """
+        Returns the index where both label and metainfo match the provided values.
+        Raises ValueError if not found.
+        """
+        for idx, (lbl, meta) in enumerate(zip(self.label, self.metainfo)):
+            if lbl == label_key and meta == metainfo_key:
                 return idx
         raise ValueError(f"Pair ({label_key}, {metainfo_key}) not found in FeatureKeyList.")
 
-    def index_metainfo(self, key: str):
-        return [i for i, metainfo in enumerate(self.metainfo) if metainfo == key]
+    def index_metainfo(self, k):
+        """
+        Returns indices from self that have metainfo=k
+        """
+        return [i for i, m in enumerate(self.metainfo) if m == k]
 
-    def filter_metainfo(self, key: str):
-        return self[self.index_metainfo(key)]
+    def filter_metainfo(self, k):
+        """
+        Return a FeatureKeyList containing fks from self that have metainfo=k
+        """
+        idxs = [i for i,m in enumerate(self.metainfo) if m==k]
+        return self[idxs]
 
-    def has_label(self, key: str) -> bool:
-        return key in self.label
+    def has_label(self, x):
+        return x in self.label
 
     def dump(self):
-        return [f"{label}, {metainfo}" for label, metainfo in zip(self.label, self.metainfo)]
+        return [f"{label}, {meta}" for label, meta in zip(self.label, self.metainfo)]
 
-    @staticmethod
-    def load(input_keys):
-        if not input_keys:
-            return FeatureKeyList([], [])
-        labels, metainfos = zip(*[s.split(", ", 1) for s in input_keys])
-        return FeatureKeyList(label=list(labels), metainfo=list(metainfos))
+    def load(input):
+        labels, metas = zip(*[s.split(', ') for s in input])
+        return FeatureKeyList(label=list(labels), metainfo=list(metas))

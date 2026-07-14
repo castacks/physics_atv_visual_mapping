@@ -5,6 +5,7 @@ import open3d as o3d
 from ros_torch_converter.datatypes.pointcloud import FeaturePointCloudTorch
 
 from physics_atv_visual_mapping.localmapping.base import LocalMapper
+from physics_atv_visual_mapping.localmapping.metadata import LocalMapperMetadata
 from physics_atv_visual_mapping.utils import *
 
 class VoxelLocalMapper(LocalMapper):
@@ -410,6 +411,28 @@ class VoxelGrid:
         self.misses = self.misses[mask]
 
         self.metadata.origin += px_shift * self.metadata.resolution
+
+    def replace_features(self, new_fks, new_features):
+        """Return a copy of this grid with a replacement feature tensor."""
+        assert len(new_fks) == new_features.shape[1]
+        assert self.features.shape[0] == new_features.shape[0]
+
+        new_voxel_grid = VoxelGrid(
+            metadata=LocalMapperMetadata(
+                origin=self.metadata.origin.clone(),
+                length=self.metadata.length.clone(),
+                resolution=self.metadata.resolution.clone(),
+                device=self.device,
+            ),
+            feature_keys=new_fks,
+            device=self.device,
+        )
+        new_voxel_grid.raster_indices = self.raster_indices.clone()
+        new_voxel_grid.feature_mask = self.feature_mask.clone()
+        new_voxel_grid.hits = self.hits.clone()
+        new_voxel_grid.misses = self.misses.clone()
+        new_voxel_grid.features = new_features
+        return new_voxel_grid
 
     def pts_in_bounds(self, pts):
         """Check if points are in bounds

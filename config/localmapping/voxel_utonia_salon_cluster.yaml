@@ -1,0 +1,12 @@
+mapper_type: voxel
+ema: 0.5
+n_features: -1
+metadata:
+    origin: [-30., -30., -10.]
+    length: [60., 60., 20.]
+    resolution: [0.4, 0.4, 0.1]
+
+raytracer:
+    type: frustum
+    sensor:
+        type: VLP32C-front

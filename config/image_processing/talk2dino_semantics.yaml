@@ -1,0 +1,7 @@
+-
+  type: talk2dino_seg
+  args:
+    ontology: {}
+    image_insize: [128, 224]
+    sharpness: 20.0
+    return_logits: true

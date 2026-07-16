@@ -101,10 +101,10 @@ class FeatureKeyList:
     
     def has_label(self, x):
         return x in self.label
-    
+
     def dump(self):
         return [f"{label}, {meta}" for label, meta in zip(self.label, self.metainfo)]
-    
+
     def load(input):
         labels, metas = zip(*[s.split(', ') for s in input])
         return FeatureKeyList(label=list(labels), metainfo=list(metas))

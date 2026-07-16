@@ -107,7 +107,7 @@ def get_projection_matrix(intrinsics, extrinsics):
 
     return P
 
-def get_pixel_projection(points, P, images):
+def get_pixel_projection(points, P, images, return_depth=False):
     """Returns projection information for a set of points
         onto a set of images
 
@@ -119,6 +119,7 @@ def get_pixel_projection(points, P, images):
     Returns:
         coords: [B x N x 2] FloatTensor of pixel coords for each image
         valid_mask: [B x N] BoolTensor containing True if the N-th pt is visible in the B-th image
+        camera_depths: [B x N] FloatTensor of optical-axis depths when return_depth is True
     """
     iw = images.shape[2]
     ih = images.shape[1]
@@ -142,9 +143,19 @@ def get_pixel_projection(points, P, images):
 
     valid_mask = cond1 & cond2 & cond3 & cond4 & cond5
 
+    if return_depth:
+        return coords, valid_mask, hm_px[..., 2]
+
     return coords, valid_mask
 
-def cleanup_projection(points, pixel_coords, valid_mask, images):
+def cleanup_projection(
+    points,
+    pixel_coords,
+    valid_mask,
+    images,
+    camera_depths=None,
+    max_depth_gap=1.,
+):
     """
     Perform simple outlier removal per pixel to prevent "bleeding" of projection.
     Algo is something like this:
@@ -157,6 +168,9 @@ def cleanup_projection(points, pixel_coords, valid_mask, images):
         points: [Nx3] FloatTensor of points (in base frame)
         coords: [B x N x 2] FloatTensor of pixel coords for each image
         valid_mask: [B x N] BoolTensor containing True if the N-th pt is visible in the B-th image
+        camera_depths: optional [B x N] optical-axis depths. When provided, cleanup is
+            independent of the pointcloud's source frame.
+        max_depth_gap: maximum depth behind the closest point in a pixel before filtering
 
     Returns:
         valid_mask: [B x N] BoolTensor of whether the N-th pt was filtered in the B-th image
@@ -165,8 +179,19 @@ def cleanup_projection(points, pixel_coords, valid_mask, images):
     ih = images.shape[1]
     ni = images.shape[0]
 
-    ranges = torch.linalg.norm(points, dim=-1)
-    ranges = ranges.view(1, -1).tile(images.shape[0], 1)
+    if max_depth_gap < 0.:
+        raise ValueError("max_depth_gap must be non-negative")
+
+    if camera_depths is None:
+        ranges = torch.linalg.norm(points, dim=-1)
+        ranges = ranges.view(1, -1).tile(images.shape[0], 1)
+    else:
+        if camera_depths.shape != valid_mask.shape:
+            raise ValueError(
+                "camera_depths must have the same [B x N] shape as valid_mask"
+            )
+        ranges = camera_depths.clone()
+
     ranges[~valid_mask] = 1e10
 
     #need to scatter ranges into a BxWxH
@@ -196,7 +221,7 @@ def cleanup_projection(points, pixel_coords, valid_mask, images):
     # too_far = (ranges - query_ranges) > (1. * query_range_stds)
 
     #magic number, not sure the best way to cluster right now.
-    too_far = (ranges - query_ranges) > 1.
+    too_far = (ranges - query_ranges) > max_depth_gap
 
     new_valid = ~too_far & valid_mask
 

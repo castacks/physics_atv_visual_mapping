@@ -8,6 +8,8 @@ data_files = [
     ("share/" + package_name, ["package.xml"]),
     (os.path.join("share", package_name), glob("launch/*.py")),
     (os.path.join("share", package_name, "config", "ros"), glob("config/ros/*.yaml")),
+    (os.path.join("share", package_name, "config", "vfm_segmentation"), glob("config/vfm_segmentation/*.yaml")),
+    (os.path.join("share", package_name, "config", "image_processing"), glob("config/image_processing/*.yaml")),
 ]
 
 setup(

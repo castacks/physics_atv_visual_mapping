@@ -25,6 +25,7 @@ def main():
     parser.add_argument("--image-dir", required=True)
     parser.add_argument("--mask-dir", required=True)
     parser.add_argument("--radius", type=int, default=12)
+    parser.add_argument("--jump", type=int, default=50)
     parser.add_argument(
         "--types",
         default="danger",
@@ -109,7 +110,7 @@ def main():
         menu = " ".join(f"{i + 1}:{label}" for i, label in enumerate(labels[:9]))
         ax.set_title(
             f"{idx + 1}/{len(files)} {files[idx].name} | active={active_label} | "
-            f"L paint, R erase, t type, n next, p prev, q save+quit | {menu}"
+            f"L paint, R erase, t type, n/p, [/], q save+quit | {menu}"
         )
         fig.canvas.draw_idle()
 
@@ -129,6 +130,14 @@ def main():
         elif event.key == "p":
             save()
             idx = max(idx - 1, 0)
+            load()
+        elif event.key == "]":
+            save()
+            idx = min(idx + args.jump, len(files) - 1)
+            load()
+        elif event.key == "[":
+            save()
+            idx = max(idx - args.jump, 0)
             load()
         elif event.key == "t":
             save()

@@ -822,7 +822,14 @@ class VoxelGrid:
 
         return True
 
-    def visualize(self, viz_all=True, midpoints=True, sample_frac=1.0):
+    def visualize(self, viz_all=True, midpoints=True, sample_frac=1.0, color_layer=None, cmap='jet'):
+        """
+        Args:
+            color_layer: feature key (str) or list of feature keys to color by. If None, falls back
+                to auto-detect (rgb channels if present, else the first 3 raw feature channels)
+                which breaks/is ambiguous when a voxel map carries both rgb and other (e.g. vfm)
+            cmap: colormap used only when color_layer selects a single feature.
+        """
         pc = o3d.geometry.PointCloud()
         if midpoints:
             pts = self.feature_midpoints
@@ -831,13 +838,25 @@ class VoxelGrid:
                 self.raster_indices_to_grid_indices(self.feature_raster_indices)
             )
 
-        is_rgb = all([k in self.feature_keys.label for k in 'rgb'])
+        if color_layer is not None:
+            color_layer = color_layer if isinstance(color_layer, list) else [color_layer]
+            color_idxs = [self.feature_keys.index(k) for k in color_layer]
+            color_raw = self.features[:, color_idxs]
 
-        if is_rgb:
-            idxs = [self.feature_keys.index(k) for k in 'rgb']
-            colors = self.features[:, idxs]
+            if len(color_idxs) > 1:
+                colors = normalize_dino(color_raw)
+            else:
+                _x = color_raw[:, 0]
+                _x = (_x - _x.min()) / (_x.max() - _x.min())
+                colors = torch.tensor(plt.colormaps[cmap](_x.cpu().numpy())[..., :3], device=_x.device, dtype=self.features.dtype)
         else:
-            colors = normalize_dino(self.features[:, :3])
+            is_rgb = all([k in self.feature_keys.label for k in 'rgb'])
+
+            if is_rgb:
+                idxs = [self.feature_keys.index(k) for k in 'rgb']
+                colors = self.features[:, idxs]
+            else:
+                colors = normalize_dino(self.features[:, :3])
 
         #all_indices is a superset of indices
         if viz_all:

@@ -2,6 +2,7 @@ import os
 import yaml
 import tqdm
 import argparse
+from pathlib import Path
 
 import copy
 import torch
@@ -11,6 +12,7 @@ from ros_torch_converter.datatypes.pointcloud import FeaturePointCloudTorch
 from ros_torch_converter.datatypes.voxel_grid import VoxelGridTorch
 
 from tartandriver_utils.os_utils import kitti_n_frames
+from torch_coordinator.stream_control import wait_for_stream_ack
 
 from physics_atv_visual_mapping.localmapping.metadata import LocalMapperMetadata
 from physics_atv_visual_mapping.localmapping.voxel.voxel_localmapper import VoxelGrid, VoxelLocalMapper
@@ -97,7 +99,16 @@ if __name__ == '__main__':
     parser.add_argument('--voxel_dir', type=str, required=False, default='mapping/voxel_map')
     parser.add_argument('--output_dir', type=str, required=False, default='inpainting/voxel_map_inpaint', help='dir to save to (default=inpainting/voxel_map_inpaint)')
     parser.add_argument('--device', type=str, required=False, default='cuda')
+    parser.add_argument('--stream-control-dir', type=Path, help='directory for batch ready/ack markers')
+    parser.add_argument('--stream-batch-size', type=int, help='pause after this many output frames')
     args = parser.parse_args()
+
+    if (args.stream_control_dir is None) != (args.stream_batch_size is None):
+        parser.error('--stream-control-dir and --stream-batch-size must be used together')
+    if args.stream_batch_size is not None and args.stream_batch_size < 1:
+        parser.error('--stream-batch-size must be positive')
+    if args.stream_control_dir is not None:
+        args.stream_control_dir.mkdir(parents=True, exist_ok=True)
 
     N = kitti_n_frames(args.run_dir)
 
@@ -163,6 +174,14 @@ if __name__ == '__main__':
 
             vgt_out = VoxelGridTorch.from_voxel_grid(inpaint_vg)
             vgt_out.to_kitti(output_dir, si)
+
+            if args.stream_control_dir is not None:
+                wait_for_stream_ack(
+                    args.stream_control_dir,
+                    args.stream_batch_size,
+                    N,
+                    len(saved_frames),
+                )
 
             base_vg = VoxelGridTorch.from_kitti(voxel_dir, si, device=localmapper.device).voxel_grid
 

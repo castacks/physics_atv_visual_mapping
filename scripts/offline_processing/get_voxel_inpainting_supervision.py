@@ -15,6 +15,7 @@ from tartandriver_utils.os_utils import kitti_n_frames
 from torch_coordinator.stream_control import wait_for_stream_ack
 
 from physics_atv_visual_mapping.localmapping.metadata import LocalMapperMetadata
+from physics_atv_visual_mapping.localmapping.hindsight import compute_overlaps
 from physics_atv_visual_mapping.localmapping.voxel.voxel_localmapper import VoxelGrid, VoxelLocalMapper
 
 """
@@ -40,31 +41,6 @@ def get_metadatas(voxel_dir, device):
         metadatas.append(metadata)
 
     return metadatas
-
-def compute_overlaps(metadatas):
-    """
-    Args:
-        metadatas: [N] list of LocalMapperMetadatas defining the mapping volume
-    Returns:
-        overlaps: [N] list of indices for the last volume intersecting with the volume at that timestep
-    """
-    N = len(metadatas)
-    maxidx = []
-
-    for i in range(N):
-        curr_metadata = metadatas[i]
-        curr_maxidx = i
-        for ii in range(i, N):
-            check_metadata = metadatas[ii]
-
-            if curr_metadata.intersects(check_metadata):
-                curr_maxidx = ii
-            else:
-                break
-
-        maxidx.append(curr_maxidx)
-
-    return torch.tensor(maxidx)
 
 def crop_voxel_grid(voxel_grid, metadata_new):
     """

@@ -1,0 +1,7 @@
+mapper_type: voxel
+ema: 1.0
+n_features: -1
+metadata:
+  origin: [-50.0, -50.0, -10.0]
+  length: [100.0, 100.0, 20.0]
+  resolution: [0.4, 0.4, 0.1]

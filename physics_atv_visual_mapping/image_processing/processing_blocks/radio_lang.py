@@ -55,7 +55,7 @@ class GaussKernelAttn(nn.Module):
     self.device = device
     self.num_prefix_tokens = num_prefix_tokens
 
-  def forward(self, x: torch.Tensor, attn_mask=None) -> torch.Tensor:
+  def forward(self, x: torch.Tensor, attn_mask=None, is_causal: bool = False) -> torch.Tensor:
     B, N, C = x.shape
     h, w = self.input_resolution
     n_patches = (w // 16, h //16)

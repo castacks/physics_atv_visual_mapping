@@ -25,6 +25,9 @@ class Talk2DinoSegBlock(ImageProcessingBlock):
         self.tensorrt_engine = os.path.expandvars(tensorrt_engine or "")
         if "$" in self.tensorrt_engine:
             self.tensorrt_engine = ""
+        elif self.tensorrt_engine and not os.path.isfile(self.tensorrt_engine):
+            print(f"Talk2DINO TensorRT engine not found; using PyTorch: {self.tensorrt_engine}")
+            self.tensorrt_engine = ""
 
         ##setup talk2dino
         self.talk2dino = AutoModel.from_pretrained(

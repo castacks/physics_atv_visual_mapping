@@ -14,7 +14,7 @@ class Talk2DinoSegBlock(ImageProcessingBlock):
     """
     Perform semantic segmentation with Talk2Dino (Barselotti et al. 2025)
     """
-    def __init__(self, ontology, image_insize, sharpness, return_logits, models_dir, device='cuda', apply_pamr=True, use_fp16=False):
+    def __init__(self, ontology, image_insize, sharpness, return_logits, models_dir, device='cuda', apply_pamr=True, use_fp16=False, tensorrt_engine=None):
         self.ontology = load_ontology(ontology)
         self.image_insize = image_insize
         self.sharpness = sharpness
@@ -22,6 +22,9 @@ class Talk2DinoSegBlock(ImageProcessingBlock):
         self.device = device
         self.apply_pamr = apply_pamr
         self.use_fp16 = use_fp16
+        self.tensorrt_engine = os.path.expandvars(tensorrt_engine or "")
+        if "$" in self.tensorrt_engine:
+            self.tensorrt_engine = ""
 
         ##setup talk2dino
         self.talk2dino = AutoModel.from_pretrained(
@@ -32,6 +35,21 @@ class Talk2DinoSegBlock(ImageProcessingBlock):
         ##precompute text embeddings
         with torch.no_grad():
             self.text_embed = self.talk2dino.encode_text(self.ontology['prompts'])
+
+        if self.tensorrt_engine:
+            from physics_atv_visual_mapping.image_processing.processing_blocks.tensorrt_dino_backbone import (
+                TensorRTDinoBackbone,
+            )
+
+            self.talk2dino.model = TensorRTDinoBackbone(
+                self.tensorrt_engine,
+                self.talk2dino.feats,
+                device=self.device,
+            ).eval()
+            torch.cuda.empty_cache()
+            print(f"Talk2DINO backbone backend: TensorRT ({self.tensorrt_engine})")
+        else:
+            print("Talk2DINO backbone backend: PyTorch")
 
     def run(self, image, intrinsics, image_orig):
         assert image.shape[1] == 3, "Talk2DinoSeg needs BGR inputs!"

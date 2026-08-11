@@ -9,3 +9,5 @@
     apply_pamr: true
     # CUDA autocast FP16 improves performance.
     use_fp16: true
+    # Optional fixed-shape DINOv2 engine; unset environments use PyTorch.
+    tensorrt_engine: ${TALK2DINO_TENSORRT_ENGINE}

@@ -1,0 +1,40 @@
+0:
+  id: floor
+  prompt: floor carpet or tile
+  color: [80, 190, 80]
+1:
+  id: wall
+  prompt: wall or structural column
+  color: [160, 160, 160]
+2:
+  id: ceiling
+  prompt: ceiling
+  color: [120, 80, 160]
+3:
+  id: stairs
+  prompt: stairs staircase or stair steps
+  color: [255, 210, 70]
+4:
+  id: furniture_clutter
+  prompt: chair table cabinet box or furniture
+  color: [230, 60, 60]
+5:
+  id: doorway
+  prompt: door or doorway
+  color: [70, 220, 210]
+6:
+  id: person
+  prompt: person
+  color: [255, 150, 210]
+7:
+  id: equipment
+  prompt: robot machine computer equipment or tool cart
+  color: [245, 245, 80]
+8:
+  id: wire_cable
+  prompt: wire cable cord or hose
+  color: [255, 100, 30]
+9:
+  id: glass
+  prompt: glass or window
+  color: [120, 220, 255]

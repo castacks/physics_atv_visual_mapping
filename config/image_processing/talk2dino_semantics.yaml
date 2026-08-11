@@ -5,3 +5,7 @@
     image_insize: [128, 224]
     sharpness: 20.0
     return_logits: true
+    # Keep PAMR refinement for high detail.
+    apply_pamr: true
+    # CUDA autocast FP16 improves performance.
+    use_fp16: true

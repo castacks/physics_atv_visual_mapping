@@ -14,13 +14,14 @@ class Talk2DinoSegBlock(ImageProcessingBlock):
     """
     Perform semantic segmentation with Talk2Dino (Barselotti et al. 2025)
     """
-    def __init__(self, ontology, image_insize, sharpness, return_logits, models_dir, device='cuda', apply_pamr=True, use_fp16=False, tensorrt_engine=None):
+    def __init__(self, ontology, image_insize, sharpness, return_logits, models_dir, device='cuda', apply_pamr=True, pamr_iterations=10, use_fp16=False, tensorrt_engine=None):
         self.ontology = load_ontology(ontology)
         self.image_insize = image_insize
         self.sharpness = sharpness
         self.return_logits = return_logits
         self.device = device
         self.apply_pamr = apply_pamr
+        self.pamr_iterations = pamr_iterations
         self.use_fp16 = use_fp16
         self.tensorrt_engine = os.path.expandvars(tensorrt_engine or "")
         if "$" in self.tensorrt_engine:
@@ -34,6 +35,15 @@ class Talk2DinoSegBlock(ImageProcessingBlock):
             "lorebianchi98/Talk2DINO-ViTB",
             trust_remote_code=True
         ).to(self.device).eval()
+
+        if self.apply_pamr:
+            if self.pamr_iterations < 1:
+                raise ValueError("pamr_iterations must be at least 1 when PAMR is enabled")
+            pamr_type = self.talk2dino.apply_pamr.__globals__["PAMR"]
+            self.talk2dino.pamr = pamr_type(
+                self.pamr_iterations,
+                [1, 2, 4, 8, 12, 24],
+            ).to(self.device).eval()
 
         ##precompute text embeddings
         with torch.no_grad():

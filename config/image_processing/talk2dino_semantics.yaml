@@ -5,8 +5,9 @@
     image_insize: [128, 224]
     sharpness: 20.0
     return_logits: true
-    # Keep PAMR refinement for high detail.
+    # Five iterations retain near-full refinement with lower latency.
     apply_pamr: true
+    pamr_iterations: 5
     # CUDA autocast FP16 improves performance.
     use_fp16: true
     # Optional fixed-shape DINOv2 engine; unset environments use PyTorch.

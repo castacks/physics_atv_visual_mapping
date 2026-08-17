@@ -14,12 +14,21 @@ class Talk2DinoSegBlock(ImageProcessingBlock):
     """
     Perform semantic segmentation with Talk2Dino (Barselotti et al. 2025)
     """
-    def __init__(self, ontology, image_insize, sharpness, return_logits, models_dir, device='cuda'):
+    def __init__(self, ontology, image_insize, sharpness, return_logits, models_dir, device='cuda', apply_pamr=True, pamr_iterations=10, use_fp16=False, tensorrt_engine=None):
         self.ontology = load_ontology(ontology)
         self.image_insize = image_insize
         self.sharpness = sharpness
         self.return_logits = return_logits
         self.device = device
+        self.apply_pamr = apply_pamr
+        self.pamr_iterations = pamr_iterations
+        self.use_fp16 = use_fp16
+        self.tensorrt_engine = os.path.expandvars(tensorrt_engine or "")
+        if "$" in self.tensorrt_engine:
+            self.tensorrt_engine = ""
+        elif self.tensorrt_engine and not os.path.isfile(self.tensorrt_engine):
+            print(f"Talk2DINO TensorRT engine not found; using PyTorch: {self.tensorrt_engine}")
+            self.tensorrt_engine = ""
 
         ##setup talk2dino
         self.talk2dino = AutoModel.from_pretrained(
@@ -27,9 +36,33 @@ class Talk2DinoSegBlock(ImageProcessingBlock):
             trust_remote_code=True
         ).to(self.device).eval()
 
+        if self.apply_pamr:
+            if self.pamr_iterations < 1:
+                raise ValueError("pamr_iterations must be at least 1 when PAMR is enabled")
+            pamr_type = self.talk2dino.apply_pamr.__globals__["PAMR"]
+            self.talk2dino.pamr = pamr_type(
+                self.pamr_iterations,
+                [1, 2, 4, 8, 12, 24],
+            ).to(self.device).eval()
+
         ##precompute text embeddings
         with torch.no_grad():
             self.text_embed = self.talk2dino.encode_text(self.ontology['prompts'])
+
+        if self.tensorrt_engine:
+            from physics_atv_visual_mapping.image_processing.processing_blocks.tensorrt_dino_backbone import (
+                TensorRTDinoBackbone,
+            )
+
+            self.talk2dino.model = TensorRTDinoBackbone(
+                self.tensorrt_engine,
+                self.talk2dino.feats,
+                device=self.device,
+            ).eval()
+            torch.cuda.empty_cache()
+            print(f"Talk2DINO backbone backend: TensorRT ({self.tensorrt_engine})")
+        else:
+            print("Talk2DINO backbone backend: PyTorch")
 
     def run(self, image, intrinsics, image_orig):
         assert image.shape[1] == 3, "Talk2DinoSeg needs BGR inputs!"
@@ -37,15 +70,27 @@ class Talk2DinoSegBlock(ImageProcessingBlock):
         image_resize = F.resize(image, self.image_insize)
         image_in = image_resize[:, [2,1,0]] * 255. #1-scaled BGR -> 255-scaled RGB
 
-        masks, _ = self.talk2dino.generate_masks(
-            image_in,
-            img_metas = None,
-            text_emb = self.text_embed,
-            classnames = ' '.join(self.ontology['labels']),
-            apply_pamr = True
-        )
+        use_amp = self.use_fp16 and str(self.device).startswith('cuda')
+        with torch.inference_mode():
+            if use_amp:
+                with torch.autocast(device_type='cuda', dtype=torch.float16):
+                    masks, _ = self.talk2dino.generate_masks(
+                        image_in,
+                        img_metas = None,
+                        text_emb = self.text_embed,
+                        classnames = ' '.join(self.ontology['labels']),
+                        apply_pamr = self.apply_pamr
+                    )
+            else:
+                masks, _ = self.talk2dino.generate_masks(
+                    image_in,
+                    img_metas = None,
+                    text_emb = self.text_embed,
+                    classnames = ' '.join(self.ontology['labels']),
+                    apply_pamr = self.apply_pamr
+                )
 
-        mask_logits = masks * self.sharpness
+        mask_logits = masks.float() * self.sharpness
 
         img_out = mask_logits if self.return_logits else mask_logits.softmax(dim=1)
 

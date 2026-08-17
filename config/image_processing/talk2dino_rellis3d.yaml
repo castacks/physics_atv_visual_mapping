@@ -5,3 +5,7 @@
         image_insize: [128, 224]
         sharpness: 20.
         return_logits: true
+        apply_pamr: true
+        pamr_iterations: 5
+        use_fp16: true
+        tensorrt_engine: ${TALK2DINO_TENSORRT_ENGINE}

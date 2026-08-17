@@ -13,22 +13,22 @@
 3:
   id: stairs
   prompt: stairs staircase or stair steps
-  color: [255, 210, 70]
+  color: [0, 0, 0]
 4:
   id: furniture_clutter
-  prompt: chair table cabinet box or furniture
+  prompt: chair table desk cabinet box or furniture
   color: [230, 60, 60]
 5:
   id: doorway
   prompt: door or doorway
-  color: [70, 220, 210]
+  color: [255, 255, 255]
 6:
   id: person
   prompt: person
   color: [255, 150, 210]
 7:
   id: equipment
-  prompt: robot machine computer equipment or tool cart
+  prompt: robot machine computer or equipment
   color: [245, 245, 80]
 8:
   id: wire_cable

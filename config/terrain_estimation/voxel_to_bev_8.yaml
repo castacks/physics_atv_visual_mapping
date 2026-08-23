@@ -61,6 +61,19 @@
 
             # kernel_radius: 0.5
             # kernel_sharpness: 1.0
+-
+    type: roughness
+    args:
+        # input_layer: min_elevation_filtered_inflated
+        input_layer: terrain
+        mask_layer: min_elevation_filtered_mask
+
+        thresh: 0.05 #at least this frac of neighboring cells in the kernel must be observed
+
+        kernel_params:
+            kernel_type: gaussian
+
+            kernel_radius: 2.0 #kernel radius in m
 
 - 
     type: slope

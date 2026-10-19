@@ -25,7 +25,7 @@ Example:
         --thermal_dir thermal_left_processed --mode video --out_fp rgb_thermal.mp4
 """
 
-IMAGE_PROC_CONFIG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'config', 'image_processing')
+IMAGE_PROC_CONFIG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'config', 'image_processing')
 
 RGB_INTRINSICS = np.array([477.6049499511719, 0.0, 499.5, 0.0, 477.6049499511719, 252.0, 0.0, 0.0, 1.0])
 THERMAL_INTRINSICS = np.array([347.95429323, 0.0, 323.05630493, 0.0, 347.95429323, 247.92877579, 0.0, 0.0, 1.0])

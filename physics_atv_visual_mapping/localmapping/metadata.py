@@ -138,6 +138,27 @@ class LocalMapperMetadata:
 
         return grid_pos, invalid_mask
 
+    def grid_to_world(self, grid_pos):
+        """Inverse of world_to_grid: continuous grid positions (any point, not just cell nodes) -> world positions.
+
+        Args:
+            grid_pos:
+                [B x K x T x 2] Tensor of continuous grid positions (same layout world_to_grid returns)
+            metadata:
+                res: [B x 2]
+                origin [B x 2]
+
+        Returns:
+            world_pos:
+                [B x K x T x 2] Tensor of world positions
+        """
+        assert grid_pos.shape[-1] >= self.ndims
+
+        _grid_pos = grid_pos[..., :self.ndims]
+        trailing_dims = [1] * (_grid_pos.ndim - 2)
+
+        return _grid_pos * self.resolution.view(-1, *trailing_dims, self.ndims) + self.origin.view(-1, *trailing_dims, self.ndims)
+
     def __eq__(self, other):
         if self.ndims != other.ndims:
             return False

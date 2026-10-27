@@ -265,14 +265,15 @@ def bilinear_interpolate(coords, images):
     """
     ni, ih, iw, ic = images.shape
     rem = torch.frac(coords)
-    offset = torch.tensor([
-        [0, 0],
-        [1, 0],
-        [0, 1],
-        [1, 1]
-    ], device=images.device).view(4, 1, 1, 2)
+    # [[0, 0], [1, 0], [0, 1], [1, 1]], built on device (torch.tensor from a list is a blocking H2D copy)
+    k = torch.arange(4, device=images.device)
+    offset = torch.stack([k % 2, k // 2], dim=-1).view(4, 1, 1, 2)
 
     #[4 x B x N x 2]
+    # NOTE: the offset is added in float before .long() truncation. A coord just below an integer
+    # (e.g. 3.99999976 in float32) gives 3.99999976 + 1 -> 5.0, so the +1 neighbor becomes 5 instead
+    # of 4 and the ~1 weight lands one cell off. Rare, but up to a full cell difference.
+    # alt could do: i0 = coords.floor().long(); idxs = i0 + offset (integer add).
     idxs = torch.tile(coords.view(1, ni, -1, 2), (4, 1, 1, 1)) + offset
     #equivalent to same-padding
     ixs = idxs[..., 1].long().clip(0, ih-1)
@@ -285,7 +286,7 @@ def bilinear_interpolate(coords, images):
         rem[..., 0] * rem[..., 1]
     ], dim=0)
 
-    ibs = torch.arange(ni).view(1, ni, 1).tile(4, 1, ixs.shape[-1])
+    ibs = torch.arange(ni, device=images.device).view(1, ni, 1).tile(4, 1, ixs.shape[-1])
 
     features = images[ibs, ixs, iys]
     interp_features = (weights.view(4, ni, -1, 1) * features).sum(dim=0)
